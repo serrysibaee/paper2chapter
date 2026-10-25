@@ -1,0 +1,33 @@
+.p2c-modal .p2c-muted {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin: 0.25em 0 0.5em;
+}
+
+.p2c-modal .p2c-status {
+	margin-top: 0.75em;
+	font-size: var(--font-ui-small);
+}
+
+.p2c-modal .p2c-bar {
+	width: 100%;
+	margin: 0.25em 0 0.75em;
+}
+
+.p2c-modal .p2c-error,
+.p2c-warn {
+	color: var(--text-error);
+	white-space: pre-wrap;
+	margin: 0.5em 0;
+}
+
+.p2c-note {
+	margin: 0 0 0.75em;
+}
+
+.p2c-log {
+	max-height: 16em;
+	overflow: auto;
+	font-size: var(--font-ui-smaller);
+	white-space: pre-wrap;
+}

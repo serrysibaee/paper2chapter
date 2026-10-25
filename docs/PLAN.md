@@ -59,28 +59,30 @@ sandbox verification, citation checks, and no paid call in the test suite.
       (`obsidian` | `commonmark`), returning the Markdown and the list of assets it embeds.
 
 ### P3. Obsidian plugin (`obsidian-plugin/`)
-- [ ] Scaffold: TypeScript, esbuild, `manifest.json`, `versions.json`, styles, desktop-only.
-- [ ] API client on `requestUrl` (multipart upload built by hand, job polling with backoff).
-- [ ] Backend manager: health check, start `uvicorn` from the configured backend folder and
+- [x] Scaffold: TypeScript, esbuild, `manifest.json`, `versions.json`, styles, desktop-only.
+- [x] API client on `requestUrl` (multipart upload built by hand, job polling with backoff).
+- [x] Backend manager: health check, start `uvicorn` from the configured backend folder and
       Python, stop on unload, show its log on failure.
-- [ ] Settings tab: backend URL and folder, auto-start, output folder, provider / model / effort
+- [x] Settings tab: backend URL and folder, auto-start, output folder, provider / model / effort
       (read from and saved to the backend), audience, Python exercises, solutions.
-- [ ] Commands and menus: "Generate chapter from this PDF" (active file and file menu),
+- [x] Commands and menus: "Generate chapter from this PDF" (active file and file menu),
       "Generate chapter from a PDF…" (picker), "Start/stop backend", "Open the paper2chapter app".
-- [ ] Generate modal: upload → extract → analyze → tick known prerequisites (with cost or
+- [x] Generate modal: upload → extract → analyze → tick known prerequisites (with cost or
       "included in your plan") → generate, with stage, progress and cancel-safe errors.
-- [ ] Writer: note and attachments into the output folder, never overwriting (suffix instead),
+- [x] Writer: note and attachments into the output folder, never overwriting (suffix instead),
       then open the note.
 
 ### P4. Testing
-- [ ] Backend unit tests with **fake CLIs** (small Python scripts that act as `claude` and
+- [x] Backend unit tests with **fake CLIs** (small Python scripts that act as `claude` and
       `codex`): argument building, stdin, schema modes, usage parsing, every error path, timeout,
       Windows shim resolution. No real CLI is called by `pytest`.
-- [ ] Backend tests for `export_md.py` on the mock chapter (math, callouts, embeds, citations,
+- [x] Backend tests for `export_md.py` on the mock chapter (math, callouts, embeds, citations,
       no raw HTML) and for the new endpoints.
-- [ ] Plugin unit tests (vitest) with a stubbed `obsidian` module: multipart body, job polling,
-      file naming, the writer on an in-memory vault.
-- [ ] Plugin build and `tsc --noEmit` clean.
+- [x] Plugin unit tests (`node --test`, no extra runner) with a stubbed `obsidian` module: multipart
+      body, job polling, file naming, the writer on an in-memory vault, the backend manager, the run;
+      plus an end-to-end test where the plugin's backend manager starts the real backend (mock
+      provider) and a sample paper becomes a note.
+- [x] Plugin build and `tsc --noEmit` clean.
 - [ ] Live smoke, run by hand (`backend/scripts/smoke_cli.py`): a real paper through
       `claude-cli` and `codex-cli` end to end; results recorded below.
 - [ ] Plugin end to end: the built plugin in a scratch vault against the running backend.
@@ -117,5 +119,6 @@ sandbox verification, citation checks, and no paid call in the test suite.
 |---|---|---|
 | 2026-10-25 | Baseline suite | 80 passed, 1 skipped |
 | 2026-10-25 | Backend after P1-P2 | 108 passed, 1 skipped (21 fake-CLI tests, 7 Markdown export tests) |
+| 2026-10-25 | Plugin | 24 tests (incl. end to end on the real backend), tsc and lint clean (0 errors), main.js 25 KB |
 | 2026-10-25 | Frontend after P1 | 19 tests passed, typecheck and build clean |
 | 2026-10-25 | Live: `claude-cli` / `haiku` (Claude Code 2.0.27, signed in with a Claude plan), the 3-page sample paper | ready in 260 s, 13 requests, 34K in / 38K out tokens; checks 19 verified, 1 failed; 11 unresolved citations flagged (section/equation refs written as citations) |
