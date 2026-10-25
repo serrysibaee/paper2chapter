@@ -96,7 +96,8 @@ go through cmd.exe and its 8,191-character limit (shims are resolved to `node <s
 MCP servers or project settings, so a paper's text cannot steer an agent into acting; API keys
 stripped from the child's environment, so the plan is used rather than an API account; Codex's
 `--output-schema` for strict JSON, Claude Code's `--json-schema` when the installed version has it
-(feature-detected from `--help`), else the schema in the prompt; a per-job concurrency cap because
+(feature-detected from `--help`, like `--tools`, `--effort` and `--no-session-persistence`), else the
+schema in the prompt; a per-job concurrency cap because
 plans have rate limits. Usage is recorded with a price of zero and shown as included in the plan.
 Tests run a fake CLI (`tests/fake_cli.py`) that records its arguments, stdin and environment.
 

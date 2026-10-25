@@ -66,6 +66,7 @@ def test_claude_prompt_mode_reads_result_text(fake):
     assert args[args.index("--system-prompt") + 1] == "SYSTEM TEXT"
     assert "--strict-mcp-config" in args and "--setting-sources" in args
     assert "Bash" in args and "Read" in args  # old CLI: every tool denied by name
+    assert "--effort" not in args and "--no-session-persistence" not in args  # not offered by this CLI
     # paper, prompt and schema travel on stdin, never on the command line
     assert call["stdin"].startswith("PAPER TEXT") and "JSON Schema" in call["stdin"]
     assert not any("PAPER TEXT" in a for a in args)
@@ -83,6 +84,8 @@ def test_claude_uses_json_schema_and_tools_flags_when_available(fake, monkeypatc
     schema = json.loads(args[args.index("--json-schema") + 1])
     assert schema["additionalProperties"] is False
     assert args[args.index("--tools") + 1] == ""
+    assert args[args.index("--effort") + 1] == "high" and "--no-session-persistence" in args
+    assert "--disallowedTools" not in args
     assert "JSON Schema" not in fake()[0]["stdin"]
 
 
@@ -100,6 +103,13 @@ def test_claude_pdf_is_read_from_temp_dir_when_enabled(fake):
     assert call["files"] == ["paper.pdf"]
     assert call["args"][call["args"].index("--allowedTools") + 1] == "Read"
     assert "./paper.pdf" in call["stdin"]
+
+
+def test_claude_pdf_with_a_new_cli_offers_only_the_read_tool(fake, monkeypatch):
+    monkeypatch.setenv("FAKE_CLI_TOOLS", "1")
+    asyncio.run(provider("claude-cli", claude_cli_read_pdf=True).generate(req(pdf_bytes=b"%PDF-1.4 fake")))
+    args = fake()[0]["args"]
+    assert args[args.index("--tools") + 1] == "Read" and "--disallowedTools" not in args
 
 
 def test_claude_pdf_off_by_default(fake):
@@ -196,8 +206,20 @@ def test_npm_shim_is_resolved_to_node_script(tmp_path):
     script.write_text("// cli")
     (tmp_path / "node.exe").write_text("")
     shim = tmp_path / "claude.cmd"
-    shim.write_text('@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n')
-    assert cli_runner._resolve_npm_shim(shim) == [str(tmp_path / "node.exe"), str(script)]
+    shim.write_text('@ECHO off\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n)\r\n'
+                    '"%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n')
+    assert cli_runner._resolve_npm_shim(shim) == [str(tmp_path / "node.exe"), str(script.resolve())]
+
+
+def test_npm_shim_to_a_native_binary_runs_the_binary(tmp_path):
+    """Claude Code 2.1+ ships claude.exe; a local node_modules/.bin shim points at it through `..`."""
+    exe = tmp_path / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    shim = tmp_path / "node_modules" / ".bin" / "claude.cmd"
+    shim.parent.mkdir(parents=True)
+    shim.write_text('@ECHO off\r\nCALL :find_dp0\r\n"%dp0%\\..\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*\r\n')
+    assert cli_runner._resolve_npm_shim(shim) == [str(exe.resolve())]
 
 
 def test_resolve_cli_override_and_missing(tmp_path):

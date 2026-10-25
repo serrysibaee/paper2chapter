@@ -21,8 +21,9 @@
 	margin: 0.5em 0;
 }
 
-.p2c-note {
-	margin: 0 0 0.75em;
+.p2c-note,
+.p2c-warn {
+	margin: 0.5em 0 0;
 }
 
 .p2c-log {

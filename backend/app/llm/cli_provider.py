@@ -90,14 +90,23 @@ class ClaudeCodeProvider(CLIProvider):
 
         args = ["-p", "--output-format", "json", "--model", self.model.id,
                 "--setting-sources", "", "--strict-mcp-config", "--system-prompt", req.system]
+        has_tools_flag = "--tools" in help_text
         if read_pdf:
             (tmp / "paper.pdf").write_bytes(req.pdf_bytes)
             args += ["--allowedTools", "Read"]
-            args += ["--disallowedTools", *[t for t in _CLAUDE_TOOLS if t != "Read"]]
-        elif "--tools" in help_text:
+            if has_tools_flag:
+                args += ["--tools", "Read"]
+            else:
+                args += ["--disallowedTools", *[t for t in _CLAUDE_TOOLS if t != "Read"]]
+        elif has_tools_flag:
             args += ["--tools", ""]
         else:
             args += ["--disallowedTools", *_CLAUDE_TOOLS]
+        # newer CLIs only: feature-detected so an older Claude Code keeps working
+        if "--effort" in help_text and self.effort:
+            args += ["--effort", self.effort]
+        if "--no-session-persistence" in help_text:
+            args.append("--no-session-persistence")
         if use_schema:
             args += ["--json-schema", json.dumps(strict_schema(req.schema), separators=(",", ":"))]
         else:

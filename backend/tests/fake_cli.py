@@ -42,7 +42,8 @@ def claude(args: list[str], stdin: str, mode: str) -> int:
     if "--help" in args:
         print("Usage: claude [options]\n  --output-format <format>\n  --system-prompt <prompt>\n"
               + ("  --json-schema <schema>\n" if os.environ.get("FAKE_CLI_SCHEMA") else "")
-              + ("  --tools <tools...>\n" if os.environ.get("FAKE_CLI_TOOLS") else ""))
+              + ("  --tools <tools...>\n  --effort <level>\n  --no-session-persistence\n"
+                 if os.environ.get("FAKE_CLI_TOOLS") else ""))
         return 0
     if "--version" in args:
         print("9.9.9 (Claude Code)")

@@ -44,8 +44,8 @@ export default defineConfig(
 			'obsidianmd/no-nodejs-modules': 'off',
 			'obsidianmd/prefer-window-timers': 'off',
 			'@typescript-eslint/no-floating-promises': 'off',
-			// fakedom.ts is where createDiv and createSpan are implemented, by createEl
-			'obsidianmd/prefer-create-el': 'off',
+			// the end-to-end test talks to the real backend from Node, where requestUrl does not exist
+			'no-restricted-globals': 'off',
 		},
 	},
 );

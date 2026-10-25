@@ -57,4 +57,5 @@ def watch_parent(pid: int, interval_s: float = 5.0, on_gone=None) -> threading.T
 
     t = threading.Thread(target=run, name="parent-watchdog", daemon=True)
     t.start()
+    log.info("watching parent process %d; the backend exits when it is gone", pid)
     return t

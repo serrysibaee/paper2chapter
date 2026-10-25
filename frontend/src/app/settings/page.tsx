@@ -60,6 +60,7 @@ export default function SettingsPage() {
       <h1>Model provider</h1>
       <p className="muted">
         API keys are read from environment variables on the backend (see <code>.env.example</code>) and are never stored by the app.
+        A Claude or ChatGPT subscription needs no key: sign in once with the Claude Code or Codex CLI on this machine.
         Prices are USD per 1M input / output tokens (researched October 2026; check the provider before budgeting).
         Chapter cost is a rough estimate for a ~15-page paper.
       </p>

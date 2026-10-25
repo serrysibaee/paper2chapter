@@ -16,7 +16,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_SHIM_SCRIPT_RE = re.compile(r'"%dp0%\\(node_modules\\[^"]+?\.(?:c?js|mjs))"', re.I)
+# The target an npm .cmd shim runs: a JS entry point (run with node) or, for CLIs that ship a native
+# binary such as Claude Code 2.1+, an .exe. Global shims say `%dp0%\node_modules\...`, local
+# node_modules/.bin shims `%dp0%\..\...`.
+_SHIM_TARGET_RE = re.compile(r'"%dp0%\\([^"%]+?\.(?:c?js|mjs|exe))"', re.I)
 _help_cache: dict[tuple[str, ...], str] = {}
 
 
@@ -50,12 +53,15 @@ def _resolve_npm_shim(shim: Path) -> list[str] | None:
         text = shim.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-    m = _SHIM_SCRIPT_RE.search(text)
-    if not m:
+    # the shim's own node.exe test also matches the pattern; the target is the last quoted path
+    targets = [t for t in _SHIM_TARGET_RE.findall(text) if t.lower() != "node.exe"]
+    if not targets:
         return None
-    script = shim.parent.joinpath(*m.group(1).split("\\"))  # the shim writes Windows separators
+    script = shim.parent.joinpath(*targets[-1].split("\\")).resolve()  # the shim writes Windows separators
     if not script.is_file():
         return None
+    if script.suffix.lower() == ".exe":
+        return [str(script)]
     local_node = shim.parent / "node.exe"
     node = str(local_node) if local_node.is_file() else shutil.which("node")
     return [node, str(script)] if node else None

@@ -11,7 +11,7 @@ it can start the backend for you.
 
 ## Install
 
-Requirements: Obsidian 1.5 or later on desktop (Windows, macOS, Linux), Python 3.11+, and a model
+Requirements: Obsidian 1.13 or later on desktop (Windows, macOS, Linux), Python 3.11+, and a model
 provider (a Claude or ChatGPT subscription, an API key, or a local Ollama model).
 
 1. **Set up the backend** once, as in the [README](../README.md#quick-start):
@@ -39,7 +39,8 @@ provider (a Claude or ChatGPT subscription, an API key, or a local Ollama model)
    of your checkout (for example `C:\code\paper2chapter\backend`). Click **Connect**. The plugin
    finds the backend's `.venv` itself; set *Python* only if you use another interpreter.
 
-4. **Choose a model** in the same tab, then **Save model**. The choice is stored by the backend, so
+4. **Choose a model** in the same tab, then **Save model**. (Every setting is also found by Obsidian's
+   settings search, e.g. typing *subscription*.) The choice is stored by the backend, so
    the web app and the plugin share it.
 
 ## Use a subscription instead of an API key
@@ -49,7 +50,7 @@ provider (a Claude or ChatGPT subscription, an API key, or a local Ollama model)
 | Claude Pro or Max | *Claude subscription (Claude Code)* | Install [Claude Code](https://claude.com/claude-code), run `claude` in a terminal and sign in (`/login`). |
 | ChatGPT Plus or Pro | *ChatGPT subscription (Codex)* | `npm install -g @openai/codex`, then `codex login`. |
 
-**Check the CLI** confirms the CLI is found (and, for Codex, signed in). No key is stored anywhere:
+**Check the tool** confirms the CLI is found (and, for Codex, signed in). No key is stored anywhere:
 the vendor's own CLI holds the sign-in, and the backend only sends it prompts. Details, limits and
 terms are in [PROVIDERS.md](PROVIDERS.md#subscriptions-claude-code-and-codex).
 
@@ -133,7 +134,7 @@ on every new file.
 | Backend address | `http://127.0.0.1:8000` | A remote backend works too, but only a local one can be started by the plugin. |
 | Start the backend automatically | on | Started with `python -m uvicorn app.main:app` in the backend folder. Stopped when the plugin unloads, and only if the plugin started it; it also exits by itself once the Obsidian process that started it is gone (`P2C_PARENT_PID`), so a crash or a window reload leaves nothing running after Obsidian quits. |
 | Backend folder | | The `backend/` folder of your checkout. |
-| Python | auto | `backend/.venv`, else `python` / `python3` on PATH. |
+| Python interpreter | automatic | `backend/.venv`, else `python` / `python3` on PATH. |
 | Provider, model, effort | from the backend | Saved to the backend with **Save model**. |
 | Folder / Figures subfolder | `Paper chapters` / `attachments` | |
 | Default audience, Python exercises, Include solutions, Open the note | | |

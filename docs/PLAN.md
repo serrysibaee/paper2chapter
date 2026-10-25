@@ -107,6 +107,20 @@ sandbox verification, citation checks, and no paid call in the test suite.
       and `styles.css`, byte-identical to a local build of the same commit.
 - [ ] Submission to Obsidian's community directory: the repository owner's step.
 
+### P7. Closing the gaps (owner's request, 2026-10-25)
+- [x] The web Settings page checked in a browser: the subscription tier, *your plan* / *included*,
+      **Check CLI** (`2.0.27 (Claude Code): Installed…`), the saved selection, *included in your plan*
+      on a paper's page; no console errors. The intro now mentions subscriptions.
+- [x] Plugin lint clean, 0 warnings: the settings tab on the declarative settings API (Obsidian
+      1.13+, found by the settings search), UI text in sentence case, `fetch` allowed in Node-only tests.
+      `minAppVersion` 1.13.0, plugin version 0.1.1.
+- [x] Claude Code's `--json-schema` path, live, with Claude Code 2.1.310 installed in a scratch folder
+      (the global 2.0.27 left alone).
+- [x] Claude reading the PDF itself (`CLAUDE_CLI_READ_PDF`), live, on 2.1.310 and 2.0.27.
+- [x] The watchdog when the Obsidian window closes, live, and isolated in a real server process.
+- [x] Codex through the Obsidian plugin, live.
+- macOS and Linux by hand: not possible here; CI runs every suite on Linux.
+
 ## Risks
 
 | Risk | Mitigation |
@@ -127,5 +141,11 @@ sandbox verification, citation checks, and no paid call in the test suite.
 | 2026-10-25 | Live: `codex-cli` / `gpt-6-luna` (Codex CLI 0.164.0, ChatGPT sign-in), the sample paper | ready in 95 s, 10 requests; checks 14 verified, 0 failed; 0 unresolved citations. Codex adds ~15K tokens of its own instructions per request |
 | 2026-10-25 | Live in Obsidian 1.15.0 (scratch vault `C:\Vaults\p2c-test`), `claude-cli` / `haiku` | Connect started the backend; both CLIs listed as set up; Check the CLI and Save model worked; file menu → Generate a chapter → prerequisites → Generate; modal closed mid-run and the note was still written and opened (16K words, 1 figure embedded, 37 page links, 30 exercises with folded solutions; math, callouts and properties render). Disabling the plugin stopped the backend it started |
 | 2026-10-25 | Found in Obsidian and fixed | the Connection line reset after re-render; long model labels squeezed the setting name; raw `[@p1]` in prerequisite text; a window reload orphaned the backend (fixed by a parent-PID watchdog: the backend exits when the Obsidian process that started it is gone) |
+| 2026-10-25 | Web Settings page in the browser (Next dev + backend) | renders as designed; Check CLI works; *included in your plan* on the paper page; no console errors |
+| 2026-10-25 | Live: `claude-cli` / `haiku`, Claude Code 2.1.310 (native `claude.exe`) | `--json-schema`, `--tools ""`, `--effort`, `--no-session-persistence` used (reply in `structured_output`, no schema in the prompt); chapter in 220 s, 10 requests, no repairs, 26 verified, 0 failed, 0 unresolved |
+| 2026-10-25 | Found and fixed | Claude Code 2.1's npm shim runs `claude.exe`, which the shim resolver did not recognise (it would have gone through cmd.exe); local `.bin` shims (`%dp0%\..\`) too |
+| 2026-10-25 | Live: `CLAUDE_CLI_READ_PDF=true` | chapter in 268 s, 25 verified, 0 failed; given only the file, Claude answered a table value, a reference author and a figure caption correctly, on 2.1.310 and on 2.0.27 |
+| 2026-10-25 | Live in Obsidian: watchdog | the backend logged `watching parent process 17396` (the vault window's renderer); after a reload (plugin no longer owns it), closing that window left nothing running within 2 s; other Obsidian windows untouched. Isolated: a real server exited 4.8 s after its stand-in parent was killed, logging why |
+| 2026-10-25 | Live in Obsidian: `codex-cli` / `gpt-6-luna` through the plugin, plugin 0.1.1 | the cached analysis was reused (ready in 6 s); note written as `… 2.md` beside the first (no overwrite), 7.6K words, 23 exercises, figure embedded; declarative settings tab, provider switch re-render and settings search for *subscription* all work |
 | 2026-10-25 | Frontend after P1 | 19 tests passed, typecheck and build clean |
 | 2026-10-25 | Live: `claude-cli` / `haiku` (Claude Code 2.0.27, signed in with a Claude plan), the 3-page sample paper | ready in 260 s, 13 requests, 34K in / 38K out tokens; checks 19 verified, 1 failed; 11 unresolved citations flagged (section/equation refs written as citations) |

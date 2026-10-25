@@ -1,6 +1,6 @@
 {
 	"name": "paper2chapter-obsidian",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Turn a research-paper PDF in your vault into a textbook-style chapter note, with paper2chapter.",
 	"main": "main.js",
 	"type": "module",

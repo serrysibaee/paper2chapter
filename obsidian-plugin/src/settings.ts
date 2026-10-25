@@ -1,7 +1,7 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, type Setting, type SettingDefinitionItem } from 'obsidian';
 import type Paper2ChapterPlugin from './main.ts';
 import type { PaperCacheEntry } from './run.ts';
-import type { AppSettings, Audience, Effort } from './types.ts';
+import type { AppSettings, Audience, Effort, Selection } from './types.ts';
 
 export interface P2CSettings {
 	backendUrl: string;
@@ -50,63 +50,97 @@ export function modelLabel(m: AppSettings['providers'][number]['models'][number]
 	return `${m.label} (${TIER[m.tier] ?? m.tier}${cost})`;
 }
 
+/** Text settings stored trimmed; an empty value falls back to the default where one is required. */
+const TRIMMED = new Set(['backendUrl', 'backendDir', 'pythonPath', 'outputFolder', 'attachments']);
+const REQUIRED = new Set(['backendUrl', 'attachments']);
+
+/**
+ * The settings tab, on Obsidian's declarative settings API (1.13+), so every setting is found by the settings
+ * search. The plugin's own settings are `control` rows; the model choice lives in the backend, so its rows are
+ * rendered from what the backend reports.
+ */
 export class P2CSettingTab extends PluginSettingTab {
 	private plugin: Paper2ChapterPlugin;
 	private remote: AppSettings | null = null;
 	private remoteError = '';
+	private tried = false;
+	private connection = 'Not checked yet.';
+	private sel: Selection | null = null;
 
 	constructor(app: App, plugin: Paper2ChapterPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
-	private tried = false;
-	private connection = 'Not checked yet.';
+	getControlValue(key: string): unknown {
+		return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		if (!this.remote && !this.tried) {
-			// one quiet attempt per opening; it fails fast when the backend is not running
-			this.tried = true;
-			void this.loadRemote().then(() => { if (this.remote) this.display(); });
-		}
-		const s = this.plugin.settings;
-		const save = () => this.plugin.saveSettings();
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		let v = value;
+		if (typeof v === 'string' && TRIMMED.has(key)) v = v.trim();
+		if (REQUIRED.has(key) && !v) v = (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[key];
+		(this.plugin.settings as unknown as Record<string, unknown>)[key] = v;
+		if (key === 'backendUrl') this.plugin.resetClient();
+		await this.plugin.saveSettings();
+	}
 
-		new Setting(containerEl).setName('Backend').setHeading();
-		new Setting(containerEl)
-			.setName('Backend address')
-			.setDesc('Where the paper2chapter backend listens.')
-			.addText((t) => t.setPlaceholder(DEFAULT_SETTINGS.backendUrl).setValue(s.backendUrl).onChange(async (v) => {
-				s.backendUrl = v.trim() || DEFAULT_SETTINGS.backendUrl;
-				this.plugin.resetClient();
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Start the backend automatically')
-			.setDesc('When it is not running, start it from the backend folder below. It stops again when Obsidian closes.')
-			.addToggle((t) => t.setValue(s.autoStart).onChange(async (v) => {
-				s.autoStart = v;
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Backend folder')
-			.setDesc('The backend/ folder of your paper2chapter checkout, for example C:\\code\\paper2chapter\\backend.')
-			.addText((t) => t.setValue(s.backendDir).onChange(async (v) => {
-				s.backendDir = v.trim();
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Python')
-			.setDesc('Leave empty to use the backend\'s .venv, or Python on your PATH.')
-			.addText((t) => t.setPlaceholder('auto').setValue(s.pythonPath).onChange(async (v) => {
-				s.pythonPath = v.trim();
-				await save();
-			}));
-		const status = new Setting(containerEl).setName('Connection').setDesc(this.connection);
-		status.addButton((b) => b.setButtonText('Connect').setCta().onClick(async () => {
-			status.setDesc('Connecting…');
+	hide(): void {
+		this.tried = false;
+		super.hide();
+	}
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const hasRemote = () => this.remote !== null;
+		return [
+			{
+				type: 'group',
+				heading: 'Backend',
+				items: [
+					{ name: 'Backend address', desc: 'Where the paper2chapter backend listens.', control: { type: 'text', key: 'backendUrl', placeholder: DEFAULT_SETTINGS.backendUrl } },
+					{
+						name: 'Start the backend automatically',
+						desc: 'When it is not running, start it from the backend folder below. It stops again when Obsidian closes.',
+						control: { type: 'toggle', key: 'autoStart' },
+					},
+					{ name: 'Backend folder', desc: 'The backend folder of your paper2chapter checkout: the one that contains app/main.py.', control: { type: 'text', key: 'backendDir' } },
+					{ name: 'Python interpreter', desc: "Leave empty to use the backend's own virtual environment.", control: { type: 'text', key: 'pythonPath', placeholder: 'Automatic' } },
+					{ name: 'Connection', render: (setting) => this.renderConnection(setting) },
+					{ name: 'Backend log', searchable: false, visible: () => this.plugin.backend.log.length > 0, render: (setting) => this.renderLog(setting) },
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Model',
+				items: [
+					{ name: 'Providers', visible: () => !hasRemote(), render: (setting) => this.renderLoad(setting) },
+					{ name: 'Provider', aliases: ['subscription', 'API key', 'Claude', 'OpenAI'], visible: hasRemote, render: (setting) => this.renderProvider(setting) },
+					{ name: 'Model', visible: hasRemote, render: (setting) => this.renderModel(setting) },
+					{ name: 'Other model', visible: hasRemote, render: (setting) => this.renderOtherModel(setting) },
+					{ name: 'Reasoning effort', visible: hasRemote, render: (setting) => this.renderEffort(setting) },
+					{ name: 'Save model', searchable: false, visible: hasRemote, render: (setting) => this.renderActions(setting) },
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Chapters',
+				items: [
+					{ name: 'Folder', desc: 'Where chapter notes are created. Figures go into a subfolder.', control: { type: 'folder', key: 'outputFolder', placeholder: DEFAULT_SETTINGS.outputFolder, includeRoot: true } },
+					{ name: 'Figures subfolder', control: { type: 'text', key: 'attachments', placeholder: DEFAULT_SETTINGS.attachments } },
+					{ name: 'Default audience', control: { type: 'dropdown', key: 'audience', options: AUDIENCES } },
+					{ name: 'Python exercises', desc: 'Include coding exercises; their reference solutions are run and checked by the backend.', control: { type: 'toggle', key: 'includePython' } },
+					{ name: 'Include solutions', desc: 'Solutions are folded under each exercise.', control: { type: 'toggle', key: 'solutions' } },
+					{ name: 'Open the note when it is ready', control: { type: 'toggle', key: 'openAfter' } },
+				],
+			},
+		];
+	}
+
+	// ------------------------------------------------------------------ backend rows
+
+	private renderConnection(setting: Setting): void {
+		setting.setDesc(this.connection).addButton((b) => b.setButtonText('Connect').setCta().onClick(async () => {
+			setting.setDesc('Connecting…');
 			try {
 				const how = await this.plugin.ensureBackend();
 				this.connection = how === 'started' ? 'Started the backend.' : 'The backend is running.';
@@ -114,68 +148,21 @@ export class P2CSettingTab extends PluginSettingTab {
 			} catch (e) {
 				this.connection = (e as Error).message;
 			}
-			this.display();
+			this.update();
 		}));
-		if (this.plugin.backend.log.length) {
-			const details = containerEl.createEl('details');
-			details.createEl('summary', { text: 'Backend log' });
-			details.createEl('pre', { text: this.plugin.backend.log.slice(-60).join('\n'), cls: 'p2c-log' });
-		}
-
-		this.modelSection(containerEl);
-
-		new Setting(containerEl).setName('Chapters').setHeading();
-		new Setting(containerEl)
-			.setName('Folder')
-			.setDesc('Where chapter notes are created. Figures go into a subfolder.')
-			.addText((t) => t.setPlaceholder(DEFAULT_SETTINGS.outputFolder).setValue(s.outputFolder).onChange(async (v) => {
-				s.outputFolder = v.trim();
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Figures subfolder')
-			.addText((t) => t.setPlaceholder(DEFAULT_SETTINGS.attachments).setValue(s.attachments).onChange(async (v) => {
-				s.attachments = v.trim() || DEFAULT_SETTINGS.attachments;
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Default audience')
-			.addDropdown((d) => {
-				for (const [k, label] of Object.entries(AUDIENCES)) d.addOption(k, label);
-				d.setValue(s.audience).onChange(async (v) => {
-					s.audience = v as Audience;
-					await save();
-				});
-			});
-		new Setting(containerEl)
-			.setName('Python exercises')
-			.setDesc('Include coding exercises; their reference solutions are run and checked by the backend.')
-			.addToggle((t) => t.setValue(s.includePython).onChange(async (v) => {
-				s.includePython = v;
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Include solutions')
-			.setDesc('Solutions are folded under each exercise.')
-			.addToggle((t) => t.setValue(s.solutions).onChange(async (v) => {
-				s.solutions = v;
-				await save();
-			}));
-		new Setting(containerEl)
-			.setName('Open the note when it is ready')
-			.addToggle((t) => t.setValue(s.openAfter).onChange(async (v) => {
-				s.openAfter = v;
-				await save();
-			}));
 	}
 
-	hide(): void {
-		this.tried = false;
+	private renderLog(setting: Setting): void {
+		setting.setDesc('The last lines the backend printed.');
+		setting.descEl.createEl('pre', { text: this.plugin.backend.log.slice(-60).join('\n'), cls: 'p2c-log' });
 	}
+
+	// ------------------------------------------------------------------ model rows (stored by the backend)
 
 	private async loadRemote(): Promise<void> {
 		try {
 			this.remote = await this.plugin.client().settings();
+			this.sel = { ...this.remote.selection };
 			this.remoteError = '';
 		} catch (e) {
 			this.remote = null;
@@ -183,64 +170,82 @@ export class P2CSettingTab extends PluginSettingTab {
 		}
 	}
 
-	private modelSection(el: HTMLElement): void {
-		new Setting(el).setName('Model').setHeading();
-		if (!this.remote) {
-			new Setting(el)
-				.setDesc(this.remoteError || 'Connect to the backend to choose a provider: a Claude or ChatGPT subscription, an API key, or a local model.')
-				.addButton((b) => b.setButtonText('Load providers').onClick(async () => {
-					await this.loadRemote();
-					this.display();
-				}));
-			return;
-		}
-		const r = this.remote;
-		const sel = { ...r.selection };
-		const provider = () => r.providers.find((p) => p.id === sel.provider);
+	private provider() {
+		return this.remote?.providers.find((p) => p.id === this.sel?.provider);
+	}
 
-		new Setting(el)
-			.setName('Provider')
-			.setDesc('Subscriptions use the Claude Code or Codex CLI on this computer, signed in with your plan: no API key needed.')
-			.addDropdown((d) => {
-				for (const p of r.providers) d.addOption(p.id, p.label + (p.configured ? '' : ' (not set up)'));
-				d.setValue(sel.provider).onChange((v) => {
-					sel.provider = v;
-					sel.model = provider()?.models[0]?.id ?? '';
-					this.remote = { ...r, selection: sel };
-					this.display();
-				});
-			});
-		const p = provider();
-		if (p && !p.configured) {
-			el.createDiv({ cls: 'p2c-warn', text: p.setup_hint || (p.api_key_env ? `Set ${p.api_key_env} in the backend's environment and restart it.` : '') });
+	private renderLoad(setting: Setting): void {
+		if (!this.tried) {
+			// one quiet attempt per opening; it fails fast when the backend is not running
+			this.tried = true;
+			void this.loadRemote().then(() => { if (this.remote) this.update(); });
 		}
-		if (p?.free_note) el.createDiv({ cls: 'setting-item-description p2c-note', text: p.free_note });
-		new Setting(el)
-			.setName('Model')
-			.addDropdown((d) => {
-				for (const m of p?.models ?? []) d.addOption(m.id, modelLabel(m));
-				if (sel.model && !p?.models.some((m) => m.id === sel.model)) d.addOption(sel.model, sel.model);
-				d.setValue(sel.model).onChange((v) => {
-					sel.model = v;
-				});
-			});
-		new Setting(el)
-			.setName('Other model')
-			.setDesc('Optional: any model id the provider accepts, instead of the list above.')
-			.addText((t) => t.setPlaceholder('Model ID').onChange((v) => {
-				if (v.trim()) sel.model = v.trim();
+		setting
+			.setDesc(this.remoteError || 'Connect to the backend to choose a provider: a Claude or OpenAI subscription, an API key, or a local model.')
+			.addButton((b) => b.setButtonText('Load providers').onClick(async () => {
+				await this.loadRemote();
+				this.update();
 			}));
-		new Setting(el)
-			.setName('Reasoning effort')
-			.addDropdown((d) => {
-				d.addOption('low', 'Low: faster, lighter on limits').addOption('medium', 'Medium').addOption('high', 'High: best derivations');
-				d.setValue(sel.effort).onChange((v) => {
-					sel.effort = v as Effort;
-				});
+	}
+
+	private renderProvider(setting: Setting): void {
+		const r = this.remote;
+		const sel = this.sel;
+		if (!r || !sel) return;
+		setting.setDesc('Subscriptions need no API key: they use the command-line tool of your plan, signed in on this computer.');
+		setting.addDropdown((d) => {
+			for (const p of r.providers) d.addOption(p.id, p.label + (p.configured ? '' : ' (not set up)'));
+			d.setValue(sel.provider).onChange((v) => {
+				sel.provider = v;
+				sel.model = this.provider()?.models[0]?.id ?? '';
+				this.update();
 			});
-		const actions = new Setting(el);
+		});
+		const p = this.provider();
+		if (p && !p.configured) {
+			setting.descEl.createDiv({ cls: 'p2c-warn', text: p.setup_hint || (p.api_key_env ? `Set ${p.api_key_env} in the backend's environment and restart it.` : '') });
+		}
+		if (p?.free_note) setting.descEl.createDiv({ cls: 'p2c-note', text: p.free_note });
+	}
+
+	private renderModel(setting: Setting): void {
+		const sel = this.sel;
+		const p = this.provider();
+		if (!sel) return;
+		setting.addDropdown((d) => {
+			for (const m of p?.models ?? []) d.addOption(m.id, modelLabel(m));
+			if (sel.model && !p?.models.some((m) => m.id === sel.model)) d.addOption(sel.model, sel.model);
+			d.setValue(sel.model).onChange((v) => {
+				sel.model = v;
+				this.update(); // the description shows the chosen model's note
+			});
+		});
+		const note = p?.models.find((m) => m.id === sel.model)?.notes;
+		if (note) setting.setDesc(note);
+	}
+
+	private renderOtherModel(setting: Setting): void {
+		setting
+			.setDesc('Optional: any model ID the provider accepts, instead of the list above.')
+			.addText((t) => t.setPlaceholder('Model ID').onChange((v) => {
+				if (this.sel && v.trim()) this.sel.model = v.trim();
+			}));
+	}
+
+	private renderEffort(setting: Setting): void {
+		const sel = this.sel;
+		if (!sel) return;
+		setting.addDropdown((d) => {
+			d.addOption('low', 'Low: faster, lighter on limits').addOption('medium', 'Medium').addOption('high', 'High: best derivations');
+			d.setValue(sel.effort).onChange((v) => { sel.effort = v as Effort; });
+		});
+	}
+
+	private renderActions(setting: Setting): void {
+		const p = this.provider();
+		setting.setName('');
 		if (p?.kind === 'cli') {
-			actions.addButton((b) => b.setButtonText('Check the CLI').onClick(async () => {
+			setting.addButton((b) => b.setButtonText('Check the tool').onClick(async () => {
 				try {
 					const c = await this.plugin.client().checkProvider(p.id);
 					new Notice(`${p.label}: ${c.version ? c.version + ' · ' : ''}${c.message}`, 8000);
@@ -249,11 +254,13 @@ export class P2CSettingTab extends PluginSettingTab {
 				}
 			}));
 		}
-		actions.addButton((b) => b.setButtonText('Save model').setCta().onClick(async () => {
+		setting.addButton((b) => b.setButtonText('Save model').setCta().onClick(async () => {
+			if (!this.sel) return;
 			try {
-				this.remote = await this.plugin.client().saveSettings(sel);
-				new Notice(`New chapters will use ${sel.provider} / ${sel.model}.`);
-				this.display();
+				this.remote = await this.plugin.client().saveSettings(this.sel);
+				this.sel = { ...this.remote.selection };
+				new Notice(`New chapters will use ${this.sel.provider} / ${this.sel.model}.`);
+				this.update();
 			} catch (e) {
 				new Notice((e as Error).message, 8000);
 			}

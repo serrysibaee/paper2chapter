@@ -66,8 +66,8 @@ output is validated and repaired exactly as for API providers, and all verificat
   way the result is validated.
 - **Concurrency.** At most `CLI_MAX_CONCURRENCY` (default 2) requests run at once, to stay under
   plan rate limits. Each request may take up to `CLI_TIMEOUT_S` (default 900 s).
-- **Windows.** npm installs the CLIs as `.cmd` shims; the backend runs the underlying
-  `node <script>` directly, so prompts never pass through cmd.exe and its 8,191-character limit.
+- **Windows.** npm installs the CLIs as `.cmd` shims; the backend runs what the shim points at
+  directly (`node <script>`, or the native `claude.exe` that Claude Code 2.1+ ships), so prompts never pass through cmd.exe and its 8,191-character limit.
   Set `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` if a CLI is not on `PATH`.
 
 **Measured on 2026-10-25** (the three-page sample paper of the test suite, one chapter):
@@ -76,6 +76,14 @@ output is validated and repaired exactly as for API providers, and all verificat
 |---|---|---|---|
 | `claude-cli` / `haiku` (Claude Code 2.0.27) | 260 s | 13 | 19 verified, 1 failed |
 | `codex-cli` / `gpt-6-luna` (Codex CLI 0.164.0) | 95 s | 10 | 14 verified, 0 failed |
+| `claude-cli` / `haiku` (Claude Code 2.1.310, `--json-schema`) | 220 s | 10 | 26 verified, 0 failed |
+| same, with `CLAUDE_CLI_READ_PDF=true` | 268 s | 10 | 25 verified, 0 failed |
+
+With a Claude Code version that has `--json-schema` (2.1 and later), the CLI enforces the schema and no
+repairs were needed; 2.0.27 got the schema in the prompt and needed three. Newer versions also get
+`--effort` (your effort setting) and `--no-session-persistence`. With `CLAUDE_CLI_READ_PDF=true`, Claude
+read the PDF itself on both versions: asked only from the file, it gave a table value, a reference's
+author and a figure caption correctly.
 
 Codex adds its own agent instructions to every request, so its input-token counts look high (about
 15K per request); on a plan that is usage, not money.

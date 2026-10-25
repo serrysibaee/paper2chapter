@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased: backend 0.2.0, Obsidian plugin 0.1.0 (2026-10-25)
+## Obsidian plugin 0.1.1, backend fixes (2026-10-25)
+
+### Changed
+- The plugin's settings tab uses Obsidian's declarative settings API, so its settings appear in
+  Obsidian's settings search; the plugin now needs Obsidian 1.13 or later. Lint is clean (no errors,
+  no warnings), with UI text reworded to sentence case.
+- The model's note follows the selected model.
+- Web app Settings: the intro says a subscription needs no API key.
+
+### Fixed
+- Windows: an npm shim that runs a native binary (Claude Code 2.1+ ships `claude.exe`), or a local
+  `node_modules/.bin` shim, is now run directly instead of through cmd.exe.
+- Claude Code: `--effort` and `--no-session-persistence` are passed when the CLI has them; with
+  `CLAUDE_CLI_READ_PDF`, a CLI with `--tools` is offered only the Read tool.
+- The parent watchdog logs the PID it watches.
+
+## Backend 0.2.0, Obsidian plugin 0.1.0 (2026-10-25)
 
 ### Added
 - **Subscriptions instead of API keys.** Providers `claude-cli` (Claude Pro/Max through Claude Code)
