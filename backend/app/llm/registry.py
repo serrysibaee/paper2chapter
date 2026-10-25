@@ -151,12 +151,12 @@ def _presets(settings: Settings) -> list[ProviderPreset]:
             extra={"cli": "claude", "cli_path": settings.claude_cli_path,
                    "timeout_s": settings.cli_timeout_s, "read_pdf": settings.claude_cli_read_pdf},
             models=[
-                ModelInfo("sonnet", "Claude Sonnet (latest on your plan)", "subscription", 200_000,
-                          32_000, 0.0, 0.0, notes="Good balance of quality and plan usage."),
-                ModelInfo("opus", "Claude Opus (latest on your plan)", "subscription", 200_000,
-                          32_000, 0.0, 0.0, notes="Best derivations; uses the plan's limits fastest."),
-                ModelInfo("haiku", "Claude Haiku (latest on your plan)", "subscription", 200_000,
-                          32_000, 0.0, 0.0, notes="Fast and light on limits; weaker on long derivations."),
+                ModelInfo("sonnet", "Claude Sonnet", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="The latest Sonnet your plan offers; a good balance of quality and plan usage."),
+                ModelInfo("opus", "Claude Opus", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="The latest Opus your plan offers; best derivations, uses the plan's limits fastest."),
+                ModelInfo("haiku", "Claude Haiku", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="The latest Haiku your plan offers; fast and light on limits, weaker on long derivations."),
             ],
         ),
         ProviderPreset(

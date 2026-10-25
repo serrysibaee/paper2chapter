@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI):
     app.state.store = Store(settings.data_dir)
     app.state.jobs = JobManager(app.state.store)
     app.state.jobs.mark_interrupted()
+    if settings.p2c_parent_pid:
+        # started by the Obsidian plugin: do not outlive it
+        from .watchdog import watch_parent
+
+        watch_parent(settings.p2c_parent_pid)
     yield
 
 

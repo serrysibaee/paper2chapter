@@ -42,8 +42,10 @@ const TIER: Record<string, string> = {
 	subscription: 'included in your plan', free: 'free', 'free-tier': 'free tier', local: 'local', paid: 'paid',
 };
 
+/** A short dropdown label: the provider's own note already says a subscription is included. */
 export function modelLabel(m: AppSettings['providers'][number]['models'][number]): string {
-	const cost = m.tier === 'subscription' ? '' : m.typical_chapter_cost_usd === null ? '' : m.typical_chapter_cost_usd === 0
+	if (m.tier === 'subscription') return m.label;
+	const cost = m.typical_chapter_cost_usd === null ? '' : m.typical_chapter_cost_usd === 0
 		? ' · free' : ` · ~$${m.typical_chapter_cost_usd.toFixed(2)}/chapter`;
 	return `${m.label} (${TIER[m.tier] ?? m.tier}${cost})`;
 }
@@ -59,6 +61,7 @@ export class P2CSettingTab extends PluginSettingTab {
 	}
 
 	private tried = false;
+	private connection = 'Not checked yet.';
 
 	display(): void {
 		const { containerEl } = this;
@@ -101,17 +104,17 @@ export class P2CSettingTab extends PluginSettingTab {
 				s.pythonPath = v.trim();
 				await save();
 			}));
-		const status = new Setting(containerEl).setName('Connection').setDesc('Not checked yet.');
+		const status = new Setting(containerEl).setName('Connection').setDesc(this.connection);
 		status.addButton((b) => b.setButtonText('Connect').setCta().onClick(async () => {
 			status.setDesc('Connecting…');
 			try {
 				const how = await this.plugin.ensureBackend();
-				status.setDesc(how === 'started' ? 'Started the backend.' : 'The backend is running.');
+				this.connection = how === 'started' ? 'Started the backend.' : 'The backend is running.';
 				await this.loadRemote();
-				this.display();
 			} catch (e) {
-				status.setDesc((e as Error).message);
+				this.connection = (e as Error).message;
 			}
+			this.display();
 		}));
 		if (this.plugin.backend.log.length) {
 			const details = containerEl.createEl('details');
@@ -220,8 +223,11 @@ export class P2CSettingTab extends PluginSettingTab {
 				d.setValue(sel.model).onChange((v) => {
 					sel.model = v;
 				});
-			})
-			.addText((t) => t.setPlaceholder('or type a model id').onChange((v) => {
+			});
+		new Setting(el)
+			.setName('Other model')
+			.setDesc('Optional: any model id the provider accepts, instead of the list above.')
+			.addText((t) => t.setPlaceholder('Model ID').onChange((v) => {
 				if (v.trim()) sel.model = v.trim();
 			}));
 		new Setting(el)

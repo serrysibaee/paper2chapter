@@ -1,0 +1,10 @@
+{
+	"id": "paper2chapter",
+	"name": "Paper2Chapter",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Turn a research-paper PDF in your vault into a textbook-style chapter note: intuition, primers, derivations, worked examples and checked exercises.",
+	"author": "paper2chapter contributors",
+	"authorUrl": "https://github.com/serrysibaee/paper2chapter",
+	"isDesktopOnly": true
+}

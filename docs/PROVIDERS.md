@@ -37,6 +37,58 @@ reasoning verbosity.
 The ≥272K figure for OpenAI is the prompt size covered by the listed prices. The pricing page does
 not state context windows.
 
+## Subscriptions: Claude Code and Codex
+
+If you pay for Claude Pro/Max or ChatGPT Plus/Pro, you can use that plan instead of an API key. The
+backend runs the vendor's own command-line tool headless, signed in with your plan:
+
+| Provider id | Uses | Sign in once | Models offered |
+|---|---|---|---|
+| `claude-cli` | [Claude Code](https://claude.com/claude-code): `claude -p --output-format json` | run `claude`, then `/login` | `sonnet`, `opus`, `haiku` (the latest your plan offers), or any id the CLI accepts |
+| `codex-cli` | [Codex CLI](https://developers.openai.com/codex/cli): `codex exec --json` | `codex login` | `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-luna`, `default`, or any id Codex accepts |
+
+**What it costs.** Nothing per token: requests count against your plan's usage limits instead. A
+chapter is about 10-13 requests. The Settings page shows *included in your plan* instead of a price.
+
+**How it works.** For each request the backend starts the CLI in an empty temporary folder, writes
+the prompt (paper text, instructions, JSON schema) to its standard input, and reads JSON back. The
+output is validated and repaired exactly as for API providers, and all verification still runs.
+
+- **No token handling.** The CLI holds the sign-in; the app never reads, stores or forwards it.
+- **No tools.** Claude Code runs with every tool disabled (or only `Read` on `./paper.pdf` if you
+  set `CLAUDE_CLI_READ_PDF=true`); Codex runs in its `read-only` sandbox. Neither loads MCP servers,
+  project settings or your Codex config, and sessions are not saved. The model writes text; it
+  cannot act on your machine.
+- **Your plan, not an API account.** `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are removed from the
+  CLI's environment, because a CLI that finds an API key may bill it instead of using the plan.
+- **Structured output.** Codex enforces the schema (`--output-schema`). Claude Code uses
+  `--json-schema` when your CLI version has it and otherwise gets the schema in the prompt; either
+  way the result is validated.
+- **Concurrency.** At most `CLI_MAX_CONCURRENCY` (default 2) requests run at once, to stay under
+  plan rate limits. Each request may take up to `CLI_TIMEOUT_S` (default 900 s).
+- **Windows.** npm installs the CLIs as `.cmd` shims; the backend runs the underlying
+  `node <script>` directly, so prompts never pass through cmd.exe and its 8,191-character limit.
+  Set `CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` if a CLI is not on `PATH`.
+
+**Measured on 2026-10-25** (the three-page sample paper of the test suite, one chapter):
+
+| Provider / model | Time | Requests | Checks |
+|---|---|---|---|
+| `claude-cli` / `haiku` (Claude Code 2.0.27) | 260 s | 13 | 19 verified, 1 failed |
+| `codex-cli` / `gpt-6-luna` (Codex CLI 0.164.0) | 95 s | 10 | 14 verified, 0 failed |
+
+Codex adds its own agent instructions to every request, so its input-token counts look high (about
+15K per request); on a plan that is usage, not money.
+
+**Terms.** A consumer subscription is for its holder. Use these providers on your own machine, for
+yourself. Do not run the backend as a service for other people on your subscription; give a shared
+deployment an API key instead.
+
+**Errors you may see.** *not signed in* (run `claude` + `/login`, or `codex login`), *usage limit
+was reached* (wait for the plan to reset or use a lighter model), *did not answer within … s*
+(raise `CLI_TIMEOUT_S`). **Check CLI** on the Settings page (or `GET /api/providers/<id>/check`)
+reports the installed version and, for Codex, the sign-in.
+
 ## Free options and their limits
 
 | Option | Limits (as published) | Practical result |
@@ -48,6 +100,8 @@ not state context windows.
 
 ## Recommendations
 
+- **Already paying for Claude or ChatGPT:** `claude-cli` (Sonnet) or `codex-cli` (GPT-6.1 Sol): no
+  extra cost, within your plan's limits.
 - **Best quality:** Claude Opus 5.5, or Sonnet 5.5 for half the cost. Native PDF input gives the most
   faithful equations, and prompt caching keeps the cost down.
 - **Good and cheap:** Gemini 3.8 Flash (free tier for non-confidential papers), GPT-5.4 mini, or
@@ -63,7 +117,8 @@ reader shows those as red badges, so quality problems are visible rather than hi
 - Switch at runtime on the **Settings** page, or with `LLM_PROVIDER` / `LLM_MODEL` env vars.
 - Any model id the provider accepts can be typed in; unknown models get no cost estimate.
 - Any OpenAI-compatible server works through `CUSTOM_OPENAI_BASE_URL` / `CUSTOM_OPENAI_MODEL`.
-- A new provider type means implementing `LLMProvider._complete()` (see `backend/app/llm/`).
+- A new provider type means implementing `LLMProvider._complete()` (see `backend/app/llm/`); a new
+  CLI-backed one subclasses `CLIProvider` in `backend/app/llm/cli_provider.py`.
 
 ## Sources
 

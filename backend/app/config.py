@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Let Claude Code read the original PDF itself (Read tool, on that one file only).
     claude_cli_read_pdf: bool = False
 
+    # Set by the Obsidian plugin when it starts the backend: exit when that process is gone.
+    p2c_parent_pid: int = 0
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

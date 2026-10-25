@@ -2,7 +2,8 @@ import { App, Modal, Setting } from 'obsidian';
 import type Paper2ChapterPlugin from './main.ts';
 import type { ChapterRun, RunStatus } from './run.ts';
 import { AUDIENCES } from './settings.ts';
-import type { Audience, Estimate, GenerationOptions, PaperAnalysis } from './types.ts';
+import { costLine, plainCitations } from './text.ts';
+import type { Audience, GenerationOptions, PaperAnalysis } from './types.ts';
 
 const PHASE: Record<RunStatus['phase'], string> = {
 	upload: 'Uploading',
@@ -13,15 +14,6 @@ const PHASE: Record<RunStatus['phase'], string> = {
 	write: 'Saving the note',
 	done: 'Done',
 };
-
-export function costLine(e: Estimate | null): string {
-	if (!e) return '';
-	const reqs = `~${e.requests} requests, ~${Math.round(e.input_tokens / 1000)}K input and ~${Math.round(e.output_tokens / 1000)}K output tokens`;
-	if (e.tier === 'subscription') return `Included in your plan (${reqs}; the plan's usage limits apply).`;
-	const v = e.cost_with_cache_usd ?? e.cost_usd;
-	if (v === null) return `Cost unknown for this model (${reqs}).`;
-	return `Estimated cost: ${v === 0 ? 'free' : v < 0.01 ? '< $0.01' : '$' + v.toFixed(2)} (${reqs}).`;
-}
 
 /** Upload → extract → analyze, then the reader's choices, then generation, which outlives the modal. */
 export class GenerateModal extends Modal {
@@ -106,7 +98,7 @@ export class GenerateModal extends Modal {
 			for (const p of a.prerequisites) {
 				new Setting(el)
 					.setName(p.name)
-					.setDesc(`${p.level} · ${p.why_needed}`)
+					.setDesc(`${p.level} · ${plainCitations(p.why_needed)}`)
 					.addToggle((t) => t.setValue(false).onChange((known) => {
 						opts.known_prerequisites = known
 							? [...opts.known_prerequisites, p.id]

@@ -83,24 +83,26 @@ sandbox verification, citation checks, and no paid call in the test suite.
       plus an end-to-end test where the plugin's backend manager starts the real backend (mock
       provider) and a sample paper becomes a note.
 - [x] Plugin build and `tsc --noEmit` clean.
-- [ ] Live smoke, run by hand (`backend/scripts/smoke_cli.py`): a real paper through
+- [x] Live smoke, run by hand (`backend/scripts/smoke_cli.py`): a real paper through
       `claude-cli` and `codex-cli` end to end; results recorded below.
-- [ ] Plugin end to end: the built plugin in a scratch vault against the running backend.
+- [x] Plugin end to end: the built plugin in a scratch vault against the running backend.
 
 ### P5. Documentation
-- [ ] README: subscriptions in the provider list and quick start; the plugin section.
-- [ ] `docs/PROVIDERS.md`: a subscription section (setup, limits, what it costs, terms).
-- [ ] `docs/OBSIDIAN.md`: install, settings, workflow, the note format, troubleshooting.
-- [ ] `obsidian-plugin/README.md`; `docs/ARCHITECTURE.md`: the CLI provider and the plugin.
-- [ ] `CHANGELOG.md`.
+- [x] README: subscriptions in the provider list and quick start; the plugin section.
+- [x] `docs/PROVIDERS.md`: a subscription section (setup, limits, what it costs, terms).
+- [x] `docs/OBSIDIAN.md`: install, settings, workflow, the note format, troubleshooting.
+- [x] `obsidian-plugin/README.md`; `docs/ARCHITECTURE.md`: the CLI provider and the plugin.
+- [x] `CHANGELOG.md`.
 
 ### P6. Production
-- [ ] CI (`.github/workflows/ci.yml`): backend pytest, frontend test/typecheck/build, plugin
+- [x] CI (`.github/workflows/ci.yml`): backend pytest, frontend test/typecheck/build, plugin
       test/build, on push and pull request.
-- [ ] Release workflow: on a `plugin-*` tag, build and attach `main.js`, `manifest.json`,
-      `styles.css`; a root `manifest.json` so BRAT can install from this repo.
-- [ ] Versions: backend 0.2.0, plugin 0.1.0.
-- [ ] Push to `main`; tag and release only on the go-ahead (D9). Submission to Obsidian's
+- [x] Release workflow (`plugin-release.yml`): on a tag that is the plugin version (`0.1.0`, the form
+      Obsidian and BRAT expect), build and attach `main.js`, `manifest.json`, `styles.css`; root
+      `manifest.json` and `versions.json`, kept in step by `npm version` and checked in CI.
+- [x] Versions: backend 0.2.0, plugin 0.1.0.
+- [x] Push to `main` (2026-10-25).
+- [ ] Tag `0.1.0` to publish the plugin release: on the go-ahead (D9). Submission to Obsidian's
       community directory is the repository owner's step.
 
 ## Risks
@@ -120,5 +122,8 @@ sandbox verification, citation checks, and no paid call in the test suite.
 | 2026-10-25 | Baseline suite | 80 passed, 1 skipped |
 | 2026-10-25 | Backend after P1-P2 | 108 passed, 1 skipped (21 fake-CLI tests, 7 Markdown export tests) |
 | 2026-10-25 | Plugin | 24 tests (incl. end to end on the real backend), tsc and lint clean (0 errors), main.js 25 KB |
+| 2026-10-25 | Live: `codex-cli` / `gpt-6-luna` (Codex CLI 0.164.0, ChatGPT sign-in), the sample paper | ready in 95 s, 10 requests; checks 14 verified, 0 failed; 0 unresolved citations. Codex adds ~15K tokens of its own instructions per request |
+| 2026-10-25 | Live in Obsidian 1.15.0 (scratch vault `C:\Vaults\p2c-test`), `claude-cli` / `haiku` | Connect started the backend; both CLIs listed as set up; Check the CLI and Save model worked; file menu → Generate a chapter → prerequisites → Generate; modal closed mid-run and the note was still written and opened (16K words, 1 figure embedded, 37 page links, 30 exercises with folded solutions; math, callouts and properties render). Disabling the plugin stopped the backend it started |
+| 2026-10-25 | Found in Obsidian and fixed | the Connection line reset after re-render; long model labels squeezed the setting name; raw `[@p1]` in prerequisite text; a window reload orphaned the backend (fixed by a parent-PID watchdog: the backend exits when the Obsidian process that started it is gone) |
 | 2026-10-25 | Frontend after P1 | 19 tests passed, typecheck and build clean |
 | 2026-10-25 | Live: `claude-cli` / `haiku` (Claude Code 2.0.27, signed in with a Claude plan), the 3-page sample paper | ready in 260 s, 13 requests, 34K in / 38K out tokens; checks 19 verified, 1 failed; 11 unresolved citations flagged (section/equation refs written as citations) |

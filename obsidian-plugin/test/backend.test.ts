@@ -32,6 +32,7 @@ function deps(over: Partial<BackendDeps> & { healthy?: boolean[] } = {}) {
 		env: { PATH: '/bin' },
 		killTree: (pid) => { killed.push(pid); child.exit(0); },
 		sleep: noSleep,
+		parentPid: 777,
 		...over,
 	};
 	return { d, spawned, child, killed };
@@ -65,6 +66,7 @@ test('a stopped backend is started with uvicorn on the configured port, and stop
 	assert.deepEqual(spawned[0]!.args, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8123']);
 	assert.equal(spawned[0]!.cwd, '/code/p2c/backend');
 	assert.equal(spawned[0]!.env.PYTHONUTF8, '1');
+	assert.equal(spawned[0]!.env.P2C_PARENT_PID, '777');
 	assert.ok(m.ownsProcess);
 	m.stop();
 	assert.deepEqual(killed, [4242]);

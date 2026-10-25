@@ -28,6 +28,8 @@ export interface BackendDeps {
 	platform: string;
 	env: Record<string, string | undefined>;
 	killTree?: (pid: number) => void;
+	/** This process: the backend exits by itself once it is gone (P2C_PARENT_PID). */
+	parentPid?: number;
 	sleep?: (ms: number) => Promise<void>;
 }
 
@@ -107,7 +109,10 @@ export class BackendManager {
 		this.push(`$ ${python} ${args.join(' ')}`);
 		const child = this.deps.spawn(python, args, {
 			cwd: s.backendDir,
-			env: { ...this.deps.env, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1' },
+			env: {
+				...this.deps.env, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1',
+				...(this.deps.parentPid ? { P2C_PARENT_PID: String(this.deps.parentPid) } : {}),
+			},
 		});
 		child.stdout?.on('data', (c) => this.push(String(c)));
 		child.stderr?.on('data', (c) => this.push(String(c)));

@@ -8,6 +8,13 @@ frontend/ (Next.js 16, TypeScript)          backend/ (FastAPI, Python 3.11+)
   /papers/[id]/chapter  reader       <---     GET  .../chapter, assets, export.html
   /settings       provider/model     <-->     GET/PUT /api/settings
   Pyodide worker (learner code, in browser)
+
+obsidian-plugin/ (TypeScript)               the same API, plus
+  PDF in the vault -> upload, poll    --->     GET .../export.md           -> one Markdown note
+  note + attachments in the vault     <---     GET .../assets/{name}
+  starts/stops uvicorn (desktop)               GET /api/providers/{id}/check
+
+backend/app/llm/cli_provider.py  --stdin-->  claude -p  |  codex exec   (subscription sign-in)
 ```
 
 ## Backend modules
@@ -16,9 +23,11 @@ frontend/ (Next.js 16, TypeScript)          backend/ (FastAPI, Python 3.11+)
 |---|---|
 | `pdf_extract.py` | PyMuPDF + pymupdf4llm layout analysis: per-page Markdown, figure crops (vector and raster), tables as Markdown, formula regions, reference list |
 | `pipeline/` | Orchestration and prompts. Analyze (map-reduce for long papers), then outline, primers, sections, practice set and wrap-up, then verify and repair |
-| `llm/` | Provider abstraction: `LLMProvider.generate(request) -> validated Pydantic object`. Anthropic SDK, one OpenAI-compatible client (OpenAI, Gemini, Groq, OpenRouter, Ollama, custom) and a mock |
+| `llm/` | Provider abstraction: `LLMProvider.generate(request) -> validated Pydantic object`. Anthropic SDK, one OpenAI-compatible client (OpenAI, Gemini, Groq, OpenRouter, Ollama, custom), two subscription providers that drive the Claude Code and Codex CLIs (`cli_provider.py`, `cli_runner.py`), and a mock |
 | `verify/` | SymPy identity checks (in a child process), Python sandbox (Docker or subprocess), citation and placeholder resolution |
 | `export.py` | Self-contained HTML (figures inlined, KaTeX, print stylesheet) |
+| `export_md.py` | One Markdown note, Obsidian-flavoured (callouts, embeds, page links) or CommonMark, with model output made inert |
+| `watchdog.py` | Ends a plugin-started backend once the Obsidian process that started it is gone |
 | `storage.py` / `jobs.py` | JSON files per paper; asyncio background jobs with progress saved to disk |
 
 ## Key decisions and trade-offs
@@ -79,6 +88,27 @@ add heavy native dependencies, especially on Windows.
 use. Hosting a closed-source service needs a commercial licence or a swap of `pdf_extract.py` for a
 permissively licensed parser. The interface is a single function.
 
+**Subscriptions through the vendors' CLIs.** A Claude or ChatGPT plan has no API key, but its CLI
+(Claude Code, Codex) signs in with it and runs headless. `CLIProvider._complete()` starts the CLI per
+request in an empty temp directory and feeds the prompt on stdin; the rest of `generate()` (repairs,
+schema downgrade, usage) is unchanged. Choices: stdin and temp files only, because Windows npm shims
+go through cmd.exe and its 8,191-character limit (shims are resolved to `node <script>`); no tools,
+MCP servers or project settings, so a paper's text cannot steer an agent into acting; API keys
+stripped from the child's environment, so the plan is used rather than an API account; Codex's
+`--output-schema` for strict JSON, Claude Code's `--json-schema` when the installed version has it
+(feature-detected from `--help`), else the schema in the prompt; a per-job concurrency cap because
+plans have rate limits. Usage is recorded with a price of zero and shown as included in the plan.
+Tests run a fake CLI (`tests/fake_cli.py`) that records its arguments, stdin and environment.
+
+**Obsidian plugin as a client.** The plugin keeps the backend's extraction and verification rather
+than re-implementing them in TypeScript. It talks to the same API through Obsidian's `requestUrl`
+(no CORS; multipart built by hand), can start `uvicorn` from the backend folder, and writes the
+`export.md` result as one note. Generation is owned by the plugin, not the modal, so closing the
+window does not lose the chapter. The paper id is cached per PDF path with the file's size and mtime,
+so an unchanged PDF reuses its extraction and analysis. Because community plugins can execute code
+found in notes (Templater tags, DataviewJS blocks), Markdown export escapes HTML, breaks Templater
+and Dataview inline syntax, and demotes code blocks outside a language allow-list to plain text.
+
 ## Known limitations
 
 - Scanned PDFs need OCR (pymupdf4llm uses RapidOCR if installed); otherwise there is almost no text.
@@ -88,3 +118,5 @@ permissively licensed parser. The interface is a single function.
   no badge, or "not checkable".
 - Quality depends heavily on the model. Free and small models produce more failed checks.
 - Single-user: no authentication. Do not expose the backend to the internet as-is.
+- Subscription providers depend on the CLIs' headless interfaces, which change between versions;
+  the provider feature-detects what it can and falls back to schema-in-prompt.

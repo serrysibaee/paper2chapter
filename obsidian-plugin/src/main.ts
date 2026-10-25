@@ -29,6 +29,7 @@ export default class Paper2ChapterPlugin extends Plugin {
 			platform: Platform.isWin ? 'win32' : Platform.isMacOS ? 'darwin' : 'linux',
 			env: desktopEnv(),
 			killTree: desktopKillTree(),
+			parentPid: desktopPid(),
 		});
 		this.addSettingTab(new P2CSettingTab(this.app, this));
 		this.statusBar = this.addStatusBarItem();
@@ -270,6 +271,11 @@ function desktopExists(): (p: string) => boolean {
 function desktopEnv(): Record<string, string | undefined> {
 	const req = nodeRequire();
 	return req ? { ...(req('process') as { env: Record<string, string | undefined> }).env } : {};
+}
+
+function desktopPid(): number | undefined {
+	const req = nodeRequire();
+	return req ? (req('process') as { pid: number }).pid : undefined;
 }
 
 function desktopKillTree(): (pid: number) => void {

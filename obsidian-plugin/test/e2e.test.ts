@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Paper2ChapterClient, type Http } from '../src/api.ts';
 import { BackendManager, findPython } from '../src/backend.ts';
-import { ChapterRun } from '../src/run.ts';
+import { ChapterRun, type PaperCacheEntry } from '../src/run.ts';
 import { MemoryVault } from './helpers.ts';
 
 const backendDir = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../backend');
@@ -55,7 +55,7 @@ test('a PDF becomes a chapter note through the real backend', { skip: !ready && 
 		assert.equal(await backend.ensure(settings), 'started');
 		const vault = new MemoryVault();
 		const pdf = { path: 'Papers/sample.pdf', name: 'sample.pdf', stamp: '1', read: async () => new Uint8Array(readFileSync(pdfPath)).buffer };
-		const cache = new Map();
+		const cache = new Map<string, PaperCacheEntry>();
 		const run = new ChapterRun(client, vault, pdf, { get: (p) => cache.get(p), set: async (p, e) => { cache.set(p, e); } }, sleep);
 		const analysis = await run.prepare(() => {});
 		assert.ok(analysis.prerequisites.length > 0);

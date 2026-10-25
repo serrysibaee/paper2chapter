@@ -1,0 +1,37 @@
+name: Release Obsidian plugin
+
+# Obsidian and BRAT expect a release whose tag is exactly the plugin version (e.g. 0.1.0, no "v"),
+# with main.js, manifest.json and styles.css attached.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: obsidian-plugin/package-lock.json
+      - name: Build
+        working-directory: obsidian-plugin
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+          test "$(jq -r .version manifest.json)" = "${GITHUB_REF_NAME}"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Obsidian plugin $GITHUB_REF_NAME" \
+            --notes "Paper2Chapter for Obsidian $GITHUB_REF_NAME. Install: docs/OBSIDIAN.md. Changes: CHANGELOG.md." \
+            obsidian-plugin/main.js obsidian-plugin/manifest.json obsidian-plugin/styles.css
