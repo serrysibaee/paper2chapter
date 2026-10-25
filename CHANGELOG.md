@@ -1,6 +1,6 @@
 # Changelog
 
-## Obsidian plugin 0.1.1, backend fixes (2026-10-25)
+## Obsidian plugin 0.1.1, backend fixes (2026-10-25, released)
 
 ### Changed
 - The plugin's settings tab uses Obsidian's declarative settings API, so its settings appear in

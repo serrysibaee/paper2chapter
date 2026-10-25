@@ -120,6 +120,8 @@ sandbox verification, citation checks, and no paid call in the test suite.
 - [x] The watchdog when the Obsidian window closes, live, and isolated in a real server process.
 - [x] Codex through the Obsidian plugin, live.
 - macOS and Linux by hand: not possible here; CI runs every suite on Linux.
+- [x] Tag `0.1.1` (go-ahead given 2026-10-25): https://github.com/serrysibaee/paper2chapter/releases/tag/0.1.1,
+      marked Latest; `main.js`, `manifest.json` and `styles.css` byte-identical to a local build.
 
 ## Risks
 
