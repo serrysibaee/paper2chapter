@@ -53,7 +53,7 @@ def _resolve_npm_shim(shim: Path) -> list[str] | None:
     m = _SHIM_SCRIPT_RE.search(text)
     if not m:
         return None
-    script = shim.parent / m.group(1)
+    script = shim.parent.joinpath(*m.group(1).split("\\"))  # the shim writes Windows separators
     if not script.is_file():
         return None
     local_node = shim.parent / "node.exe"
