@@ -102,8 +102,10 @@ sandbox verification, citation checks, and no paid call in the test suite.
       `manifest.json` and `versions.json`, kept in step by `npm version` and checked in CI.
 - [x] Versions: backend 0.2.0, plugin 0.1.0.
 - [x] Push to `main` (2026-10-25).
-- [ ] Tag `0.1.0` to publish the plugin release: on the go-ahead (D9). Submission to Obsidian's
-      community directory is the repository owner's step.
+- [x] Tag `0.1.0` (go-ahead given 2026-10-25): the release workflow published
+      https://github.com/serrysibaee/paper2chapter/releases/tag/0.1.0 with `main.js`, `manifest.json`
+      and `styles.css`, byte-identical to a local build of the same commit.
+- [ ] Submission to Obsidian's community directory: the repository owner's step.
 
 ## Risks
 
