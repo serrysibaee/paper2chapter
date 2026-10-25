@@ -72,3 +72,8 @@ paper: `P2C_SAMPLE_PDF=/path/to/paper.pdf pytest tests/test_extract.py`.
 - The app is single-user and has no authentication. Run it locally, or put it behind your own auth.
 - Generated chapters are machine-written. Badges show which items were checked automatically;
   everything else should be read critically against the paper (each claim links back to its page).
+
+## License
+
+[AGPL-3.0](LICENSE). This matches the license of PyMuPDF, which the PDF extractor depends on. If you
+run a modified version as a network service, you must make its source available to its users.
