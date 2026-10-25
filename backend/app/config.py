@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     # Groq's free plan allows ~8K tokens/minute; enable pacing + small requests.
     groq_free_tier: bool = True
 
+    # Subscriptions through the vendors' CLIs (Claude Code, Codex). Paths are only needed when
+    # the CLI is not on PATH. Plans have rate limits, so few calls run at once.
+    claude_cli_path: str = ""
+    codex_cli_path: str = ""
+    cli_timeout_s: float = 900.0
+    cli_max_concurrency: int = 2
+    # Let Claude Code read the original PDF itself (Read tool, on that one file only).
+    claude_cli_read_pdf: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

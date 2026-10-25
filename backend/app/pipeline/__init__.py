@@ -273,7 +273,8 @@ async def run_generate(
     outline_txt = _outline_text(outline)
     figure_list = ", ".join(f"{f.id} ({f.caption[:80]})" for f in ex.figures) or "none"
 
-    concurrency = 1 if (provider.preset.tokens_per_minute or provider.model.tier in ("free", "free-tier", "local")) else 3
+    concurrency = provider.preset.max_concurrency or (
+        1 if (provider.preset.tokens_per_minute or provider.model.tier in ("free", "free-tier", "local")) else 3)
     sem = asyncio.Semaphore(concurrency)
     done = {"n": 0}
     total_steps = len(outline.sections) + (1 if missing else 0) + 2

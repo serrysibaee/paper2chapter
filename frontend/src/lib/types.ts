@@ -167,7 +167,7 @@ export interface Chapter {
 export interface ModelOption {
   id: string;
   label: string;
-  tier: "free" | "free-tier" | "paid" | "local";
+  tier: "free" | "free-tier" | "paid" | "local" | "subscription";
   context_tokens: number;
   input_price: number | null;
   output_price: number | null;
@@ -187,7 +187,15 @@ export interface ProviderOption {
   pricing_note: string;
   docs_url: string;
   supports_pdf: boolean;
+  setup_hint: string;
   models: ModelOption[];
+}
+
+export interface ProviderCheck {
+  installed: boolean | null;
+  version: string | null;
+  signed_in: boolean | null;
+  message: string;
 }
 
 export interface AppSettings {

@@ -1,5 +1,6 @@
 import type {
   AppSettings, Chapter, Estimate, ExtractionSummary, GenerationOptions, PaperAnalysis, PaperRecord,
+  ProviderCheck,
 } from "./types";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
@@ -55,6 +56,7 @@ export const api = {
   chapter: (id: string) => request<Chapter>(`/api/papers/${id}/chapter`),
   settings: () => request<AppSettings>("/api/settings"),
   saveSettings: (s: AppSettings["selection"]) => request<AppSettings>("/api/settings", json("PUT", s)),
+  checkProvider: (id: string) => request<ProviderCheck>(`/api/providers/${id}/check`),
 };
 
 export const assetUrl = (paperId: string, file: string) => `${API_URL}/api/papers/${paperId}/assets/${file}`;

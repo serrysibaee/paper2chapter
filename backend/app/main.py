@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from .config import get_settings
 from .estimate import estimate_chapter, paper_tokens
 from .export import render_chapter_html
+from .export_md import render_chapter_markdown
 from .jobs import JobManager, UserFacingError
 from .llm import LLMError, get_provider, resolve_selection
 from .llm.registry import get_presets
@@ -103,7 +104,7 @@ def get_app_settings(request: Request):
             "id": p.id, "label": p.label, "kind": p.kind, "configured": p.is_configured(),
             "api_key_env": p.api_key_env, "key_required": p.key_required, "free_note": p.free_note,
             "pricing_note": p.pricing_note, "docs_url": p.docs_url, "supports_pdf": p.supports_pdf,
-            "models": models,
+            "setup_hint": p.setup_hint, "models": models,
         })
     return {
         "selection": {"provider": sel.provider, "model": sel.model, "effort": sel.effort},
@@ -123,6 +124,20 @@ def put_app_settings(update: SettingsUpdate, request: Request):
         raise HTTPException(400, "Invalid model id")
     store(request).save_settings(update.model_dump())
     return get_app_settings(request)
+
+
+@app.get("/api/providers/{provider_id}/check")
+async def check_provider(provider_id: str):
+    """Is a subscription CLI installed (and, for Codex, signed in)? Spends no tokens."""
+    preset = get_presets(settings).get(provider_id)
+    if preset is None:
+        raise HTTPException(404, f"Unknown provider '{provider_id}'")
+    if preset.kind != "cli":
+        return {"installed": None, "version": None, "signed_in": None,
+                "message": "Ready." if preset.is_configured() else f"Set {preset.api_key_env}."}
+    from .llm.cli_provider import check_cli
+
+    return await check_cli(preset)
 
 
 # --------------------------------------------------------------------------- papers
@@ -235,3 +250,25 @@ def export_html(paper_id: str, request: Request, solutions: bool = True, downloa
     slug = re.sub(r"[^a-z0-9]+", "-", chapter.title.lower()).strip("-")[:60] or "chapter"
     headers = {"Content-Disposition": f'attachment; filename="{slug}.html"'} if download else {}
     return HTMLResponse(html, headers=headers)
+
+
+@app.get("/api/papers/{paper_id}/export.md")
+def export_markdown(
+    paper_id: str, request: Request, solutions: bool = True,
+    flavor: Literal["obsidian", "commonmark"] = "obsidian",
+    asset_prefix: str = "", pdf_link: str = "",
+):
+    """The chapter as one Markdown note (the Obsidian plugin's format) and the assets it embeds.
+
+    `asset_prefix` is prepended to every embedded asset name, so figures from different papers
+    do not collide in one vault; `pdf_link` is the PDF's vault path, for page links.
+    """
+    if not re.fullmatch(r"[\w .\-]{0,80}", asset_prefix):
+        raise HTTPException(400, "Invalid asset_prefix")
+    if len(pdf_link) > 300 or re.search(r"[\[\]|#^\n\r]", pdf_link):
+        raise HTTPException(400, "Invalid pdf_link")
+    chapter = store(request).load(paper_id, "chapter", Chapter)
+    out = render_chapter_markdown(chapter, flavor=flavor, asset_prefix=asset_prefix,
+                                  pdf_link=pdf_link or None, include_solutions=solutions)
+    slug = re.sub(r"[^\w\- ]+", "", chapter.title).strip()[:100] or "Chapter"
+    return {"markdown": out.markdown, "assets": out.assets, "title": chapter.title, "filename": f"{slug}.md"}

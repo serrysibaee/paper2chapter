@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { AppSettings, ModelOption } from "@/lib/types";
+import type { AppSettings, ModelOption, ProviderCheck, ProviderOption } from "@/lib/types";
 
 const price = (m: ModelOption) =>
-  m.input_price === null || m.output_price === null ? "-" : m.input_price === 0 && m.output_price === 0 ? "$0" : `$${m.input_price} / $${m.output_price}`;
-const chapterCost = (v: number | null) => (v === null ? "-" : v === 0 ? "free" : v < 0.01 ? "< $0.01" : `~$${v.toFixed(2)}`);
-const TIER_LABEL = { free: "free", "free-tier": "free tier", paid: "paid", local: "local" } as const;
+  m.tier === "subscription" ? "your plan"
+    : m.input_price === null || m.output_price === null ? "-" : m.input_price === 0 && m.output_price === 0 ? "$0" : `$${m.input_price} / $${m.output_price}`;
+const chapterCost = (m: ModelOption) => {
+  const v = m.typical_chapter_cost_usd;
+  if (m.tier === "subscription") return "included";
+  return v === null ? "-" : v === 0 ? "free" : v < 0.01 ? "< $0.01" : `~$${v.toFixed(2)}`;
+};
+const TIER_LABEL = { free: "free", "free-tier": "free tier", paid: "paid", local: "local", subscription: "subscription" } as const;
+const notReady = (p: ProviderOption) => (p.kind === "cli" ? "CLI not found" : `set ${p.api_key_env}`);
 
 export default function SettingsPage() {
   const [s, setS] = useState<AppSettings | null>(null);
@@ -15,6 +21,17 @@ export default function SettingsPage() {
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState<"low" | "medium" | "high">("medium");
   const [msg, setMsg] = useState<{ kind: "info" | "error"; text: string } | null>(null);
+  const [checks, setChecks] = useState<Record<string, ProviderCheck | "checking">>({});
+
+  async function check(id: string) {
+    setChecks((c) => ({ ...c, [id]: "checking" }));
+    try {
+      const r = await api.checkProvider(id);
+      setChecks((c) => ({ ...c, [id]: r }));
+    } catch (e) {
+      setChecks((c) => ({ ...c, [id]: { installed: null, version: null, signed_in: null, message: (e as Error).message } }));
+    }
+  }
 
   useEffect(() => {
     api.settings().then((d) => {
@@ -60,9 +77,21 @@ export default function SettingsPage() {
               <strong>{p.label}</strong>
               {p.supports_pdf && <span className="level">reads PDFs natively</span>}
             </span>
-            {p.configured ? <span className="status ready">ready</span> : <span className="status failed">set {p.api_key_env}</span>}
+            {p.configured ? <span className="status ready">ready</span> : <span className="status failed">{notReady(p)}</span>}
           </div>
           {p.free_note && <div className="small" style={{ marginTop: "0.3rem" }}>{p.free_note}</div>}
+          {p.kind === "cli" && provider === p.id && (
+            <div className="row small" style={{ marginTop: "0.3rem" }}>
+              <button type="button" className="btn ghost small" onClick={(e) => { e.preventDefault(); check(p.id); }}>Check CLI</button>
+              {checks[p.id] === "checking" && <span className="muted"><span className="spinner" /> Checking…</span>}
+              {checks[p.id] && checks[p.id] !== "checking" && (() => {
+                const c = checks[p.id] as ProviderCheck;
+                const ok = c.installed && c.signed_in !== false;
+                return <span className={ok ? "muted" : "bad"}>{c.version ? `${c.version}: ` : ""}{c.message}</span>;
+              })()}
+            </div>
+          )}
+          {!p.configured && p.setup_hint && <div className="small bad">{p.setup_hint}</div>}
           {p.pricing_note && <div className="small muted">{p.pricing_note}</div>}
           {provider === p.id && (
             <table className="models" style={{ marginTop: "0.6rem" }}>
@@ -74,7 +103,7 @@ export default function SettingsPage() {
                     <td><code>{m.id}</code></td>
                     <td><span className={`tier ${m.tier}`}>{TIER_LABEL[m.tier]}</span></td>
                     <td>{price(m)}</td>
-                    <td>{chapterCost(m.typical_chapter_cost_usd)}</td>
+                    <td>{chapterCost(m)}</td>
                     <td className="muted">{m.notes}</td>
                   </tr>
                 ))}
@@ -101,7 +130,11 @@ export default function SettingsPage() {
         </div>
         <div className="row">
           <button className="btn" onClick={save} disabled={!model}>Save</button>
-          {current && !current.configured && <span className="bad small">Set {current.api_key_env} in the backend environment and restart it.</span>}
+          {current && !current.configured && (
+            <span className="bad small">
+              {current.kind === "cli" ? current.setup_hint : `Set ${current.api_key_env} in the backend environment and restart it.`}
+            </span>
+          )}
         </div>
         {msg && <div className={`alert ${msg.kind}`}>{msg.text}</div>}
       </div>

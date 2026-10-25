@@ -44,6 +44,10 @@ def get_provider(settings: Settings, selection: ProviderSelection) -> LLMProvide
         from .openai_compat import OpenAICompatProvider
 
         return OpenAICompatProvider(*args)
+    if preset.kind == "cli":
+        from .cli_provider import ClaudeCodeProvider, CodexProvider
+
+        return (ClaudeCodeProvider if preset.extra["cli"] == "claude" else CodexProvider)(*args)
     from .mock import MockProvider
 
     return MockProvider(*args)

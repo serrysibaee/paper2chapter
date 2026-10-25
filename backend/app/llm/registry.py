@@ -20,7 +20,7 @@ from typing import Literal
 from ..config import Settings
 
 StructuredMode = Literal["json_schema", "json_object", "prompt"]
-Tier = Literal["free", "free-tier", "paid", "local"]
+Tier = Literal["free", "free-tier", "paid", "local", "subscription"]
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class ModelInfo:
 class ProviderPreset:
     id: str
     label: str
-    kind: Literal["anthropic", "openai_compat", "mock"]
+    kind: Literal["anthropic", "openai_compat", "cli", "mock"]
     models: list[ModelInfo]
     api_key_env: str | None = None
     base_url: str | None = None
@@ -56,12 +56,20 @@ class ProviderPreset:
     pricing_note: str = ""
     free_note: str = ""
     docs_url: str = ""
+    max_concurrency: int | None = None  # parallel requests per job (None: the pipeline decides)
+    setup_hint: str = ""  # what to do when the provider is not ready (shown in Settings)
     extra: dict = field(default_factory=dict)
 
     def model(self, model_id: str) -> ModelInfo:
         for m in self.models:
             if m.id == model_id:
                 return m
+        if self.kind == "cli":
+            # Any model the CLI accepts; usage is covered by the plan, not billed per token.
+            return ModelInfo(id=model_id, label=model_id, tier="subscription", context_tokens=200_000,
+                             max_output_tokens=32_000, input_price=0.0, output_price=0.0,
+                             reasoning=self.models[0].reasoning if self.models else False,
+                             notes="Model id typed by you; the CLI decides whether your plan has it.")
         # Unknown/custom model id: conservative defaults, no pricing.
         return ModelInfo(
             id=model_id,
@@ -76,6 +84,10 @@ class ProviderPreset:
         return os.environ.get(self.api_key_env) if self.api_key_env else None
 
     def is_configured(self) -> bool:
+        if self.kind == "cli":
+            from .cli_runner import resolve_cli
+
+            return resolve_cli(self.extra["cli"], self.extra.get("cli_path", "")) is not None
         return not self.key_required or bool(self.api_key())
 
 
@@ -119,6 +131,58 @@ def _presets(settings: Settings) -> list[ProviderPreset]:
                           0.75, 4.50, 0.075, reasoning=True),
                 ModelInfo("gpt-6-luna", "GPT-6 Luna", "paid", 272_000, 32_000,
                           0.10, 0.50, 0.01, reasoning=True, notes="Cheapest OpenAI option."),
+            ],
+        ),
+        ProviderPreset(
+            id="claude-cli",
+            label="Claude subscription (Claude Code)",
+            kind="cli",
+            key_required=False,
+            structured_mode="json_schema",  # --json-schema when the CLI has it, else schema in prompt
+            supports_pdf=settings.claude_cli_read_pdf,
+            max_concurrency=settings.cli_max_concurrency,
+            docs_url="https://claude.com/claude-code",
+            setup_hint=("Install Claude Code, run `claude` once in a terminal and sign in with your "
+                        "Claude Pro/Max account (/login). Set CLAUDE_CLI_PATH if it is not on PATH."),
+            free_note=("Uses your Claude Pro or Max plan through the Claude Code CLI on this machine: "
+                       "no API key and no per-token bill, but the plan's usage limits apply (a chapter "
+                       "is ~10-12 requests). For your own use only; do not host this for others."),
+            pricing_note="Included in your Claude plan. Token counts are shown for information.",
+            extra={"cli": "claude", "cli_path": settings.claude_cli_path,
+                   "timeout_s": settings.cli_timeout_s, "read_pdf": settings.claude_cli_read_pdf},
+            models=[
+                ModelInfo("sonnet", "Claude Sonnet (latest on your plan)", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="Good balance of quality and plan usage."),
+                ModelInfo("opus", "Claude Opus (latest on your plan)", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="Best derivations; uses the plan's limits fastest."),
+                ModelInfo("haiku", "Claude Haiku (latest on your plan)", "subscription", 200_000,
+                          32_000, 0.0, 0.0, notes="Fast and light on limits; weaker on long derivations."),
+            ],
+        ),
+        ProviderPreset(
+            id="codex-cli",
+            label="ChatGPT subscription (Codex)",
+            kind="cli",
+            key_required=False,
+            structured_mode="json_schema",  # --output-schema
+            max_concurrency=settings.cli_max_concurrency,
+            docs_url="https://developers.openai.com/codex/cli",
+            setup_hint=("Install the Codex CLI (npm install -g @openai/codex), then run `codex login` "
+                        "and sign in with your ChatGPT Plus/Pro account. Set CODEX_CLI_PATH if needed."),
+            free_note=("Uses your ChatGPT Plus or Pro plan through the Codex CLI on this machine: no API "
+                       "key and no per-token bill, but Codex's plan limits apply. For your own use only."),
+            pricing_note="Included in your ChatGPT plan. Token counts are shown for information.",
+            extra={"cli": "codex", "cli_path": settings.codex_cli_path,
+                   "timeout_s": settings.cli_timeout_s},
+            models=[
+                ModelInfo("gpt-6.1-sol", "GPT-6.1 Sol", "subscription", 272_000, 32_000, 0.0, 0.0,
+                          reasoning=True, notes="Codex's first choice (Oct 2026)."),
+                ModelInfo("gpt-6-astra", "GPT-6 Astra", "subscription", 272_000, 32_000, 0.0, 0.0,
+                          reasoning=True, notes="Flagship; uses the plan's limits fastest."),
+                ModelInfo("gpt-6-luna", "GPT-6 Luna", "subscription", 272_000, 32_000, 0.0, 0.0,
+                          reasoning=True, notes="Fast and light on limits."),
+                ModelInfo("default", "Codex default", "subscription", 272_000, 32_000, 0.0, 0.0,
+                          reasoning=True, notes="Whatever model your Codex CLI picks."),
             ],
         ),
         ProviderPreset(

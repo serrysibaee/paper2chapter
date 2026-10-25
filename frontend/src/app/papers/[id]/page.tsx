@@ -124,7 +124,8 @@ export default function PaperPage() {
           )}
           {estimate && !rec.has_chapter && (
             <p className="muted small">
-              Estimated cost for analysis + one chapter: <strong>{money(estimate.cost_with_cache_usd ?? estimate.cost_usd)}</strong>{" "}
+              Estimated cost for analysis + one chapter:{" "}
+              <strong>{estimate.tier === "subscription" ? "included in your plan" : money(estimate.cost_with_cache_usd ?? estimate.cost_usd)}</strong>{" "}
               (~{Math.round(estimate.input_tokens / 1000)}K input, ~{Math.round(estimate.output_tokens / 1000)}K output tokens, ~{estimate.requests} requests).
             </p>
           )}
