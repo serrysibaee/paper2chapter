@@ -1,5 +1,27 @@
 # Changelog
 
+## Obsidian plugin 0.2.0 (unreleased)
+
+The second step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S2). The defaults
+write the 0.1.1 note in the same place, byte for byte, and 0.1.1's saved settings carry over. Needs backend 0.3.0
+for the Textbook and template layouts and for page-link templates.
+
+### Added
+- **Sources**: folders outside the vault (desktop) and Zotero 7 or later through its local API (read-only), in one
+  paper picker with the vault's PDFs. **Find the paper's own note** by properties tried in order (DOI, arXiv id,
+  Zotero key, PDF path, title, or the note's own name), which must match exactly one note.
+- **Chapters**: folder and note-name templates with tokens (`{{year}}`, `{{firstAuthor}}`, `{{paperNote}}`,
+  `{{paperNoteFolder}}`, `{{date:FORMAT}}`, …); figures beside the note, where Obsidian puts attachments, or in a
+  fixed folder; when the name is taken, a numbered note or none; quiet hours.
+- **Note format**: layouts (paper2chapter, Textbook, your own template note with placeholders for the chapter's
+  pieces, conditional blocks and tokens), the section heading's template and level, worked examples inline or
+  gathered, and page links to the vault PDF, Zotero, the file on this computer, a URL template, or none.
+- **Properties**: paper2chapter's frontmatter, or your own rows of a name, a type (text, list, link, number, date,
+  checkbox) and a value template; added, removed and reordered in the settings.
+- **Preview** of the note your settings write, from a bundled sample chapter, by the same code that writes real
+  notes (no model, no write); **settings profiles** (export, import, reset); checks as you type for every folder,
+  template and URL; a settings version, and migration from 0.1.1.
+
 ## Backend 0.3.0 (unreleased)
 
 The first of three steps toward note settings in the Obsidian plugin ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md)).

@@ -1,6 +1,6 @@
 {
 	"name": "paper2chapter-obsidian",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Turn a research-paper PDF in your vault into a textbook-style chapter note, with paper2chapter.",
 	"main": "main.js",
 	"type": "module",
@@ -8,7 +8,7 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"test": "node --test test/multipart.test.ts test/text.test.ts test/api.test.ts test/writer.test.ts test/backend.test.ts test/run.test.ts test/plugin.test.ts test/e2e.test.ts",
+		"test": "node --test test/multipart.test.ts test/text.test.ts test/api.test.ts test/writer.test.ts test/backend.test.ts test/run.test.ts test/config.test.ts test/template.test.ts test/frontmatter.test.ts test/sources.test.ts test/output.test.ts test/note.test.ts test/plugin.test.ts test/e2e.test.ts",
 		"lint": "eslint .",
 		"version": "node version-bump.mjs && git add manifest.json versions.json ../manifest.json ../versions.json"
 	},

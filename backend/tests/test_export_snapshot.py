@@ -32,3 +32,15 @@ def test_markdown_is_unchanged(chapter, name):
     out = render_chapter_markdown(chapter, **VARIANTS[name])
     assert out.markdown == (FIX / f"export-{name}.md").read_text(encoding="utf-8")
     assert out.assets == ["F1.png"]
+
+
+def test_the_plugins_sample_is_current():
+    """The Obsidian plugin bundles this fixture as its preview's sample; it must follow the parts format."""
+    import importlib.util
+
+    script = Path(__file__).parent.parent / "scripts" / "plugin_sample.py"
+    spec = importlib.util.spec_from_file_location("plugin_sample", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    bundled = Path(__file__).parent.parent.parent / "obsidian-plugin" / "src" / "sample.ts"
+    assert bundled.read_text(encoding="utf-8") == mod.render(), "run backend/scripts/plugin_sample.py"

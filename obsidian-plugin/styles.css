@@ -32,3 +32,48 @@
 	font-size: var(--font-ui-smaller);
 	white-space: pre-wrap;
 }
+
+.p2c-muted {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.p2c-error {
+	color: var(--text-error);
+	white-space: pre-wrap;
+}
+
+.p2c-help summary {
+	cursor: pointer;
+	color: var(--text-muted);
+}
+
+.p2c-help ul {
+	margin: 0.25em 0 0;
+	padding-left: 1.25em;
+	font-size: var(--font-ui-small);
+}
+
+.p2c-preview-modal {
+	width: min(56em, 92vw);
+}
+
+.p2c-preview {
+	max-height: 60vh;
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	padding: 0 1em;
+	margin-top: 0.5em;
+}
+
+.p2c-preview-raw {
+	white-space: pre-wrap;
+	font-size: var(--font-ui-smaller);
+}
+
+.p2c-import {
+	width: 100%;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}

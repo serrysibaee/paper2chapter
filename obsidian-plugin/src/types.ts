@@ -114,3 +114,85 @@ export interface MarkdownExport {
 	title: string;
 	filename: string;
 }
+
+/* `export.parts` (backend 0.3.0, app/export_md.py `ChapterParts`): the note's pieces, each already made inert. */
+
+export type VerificationStatus = 'verified' | 'failed' | 'error' | 'skipped';
+
+export interface PaperInfo {
+	title: string;
+	authors: string[];
+	year: string | null;
+	field: string | null;
+	doi: string | null;
+	arxiv: string | null;
+	page_count: number | null;
+}
+
+export interface PrerequisitePart {
+	id: string;
+	name: string;
+	why_needed: string;
+	level: string;
+	known: boolean;
+	primed: boolean;
+}
+
+export interface PrimerPart {
+	prerequisite_id: string;
+	title: string;
+	md: string;
+}
+
+export interface DerivationPart {
+	title: string;
+	md: string;
+}
+
+export interface ExamplePart {
+	title: string;
+	check: VerificationStatus | null;
+	md: string;
+}
+
+export interface SectionPart {
+	id: string;
+	number: number;
+	title: string;
+	pages: number[];
+	intuition: string;
+	body: string;
+	derivations: DerivationPart[];
+	worked_examples: ExamplePart[];
+	check_questions: string[];
+	md: string;
+}
+
+export interface ChapterParts {
+	version: number;
+	paper_id: string;
+	title: string;
+	generated_at: string;
+	provider: string;
+	model: string;
+	audience: string;
+	flavor: 'obsidian' | 'commonmark';
+	paper: PaperInfo;
+	prerequisites: PrerequisitePart[];
+	about: string;
+	one_line: string;
+	new_or_surprising: string;
+	objectives: string;
+	intuition: string;
+	primers: PrimerPart[];
+	notation: string;
+	sections: SectionPart[];
+	summary: string;
+	takeaways: string;
+	misconceptions: string;
+	practice: string[];
+	further_reading: string;
+	references: string;
+	warnings: string;
+	assets: string[];
+}

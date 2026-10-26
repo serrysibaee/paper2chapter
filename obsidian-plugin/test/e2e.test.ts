@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Paper2ChapterClient, type Http } from '../src/api.ts';
 import { BackendManager, findPython } from '../src/backend.ts';
+import { DEFAULT_SETTINGS } from '../src/config.ts';
 import { ChapterRun, type PaperCacheEntry } from '../src/run.ts';
 import { MemoryVault } from './helpers.ts';
 
@@ -71,6 +72,22 @@ test('a PDF becomes a chapter note through the real backend', { skip: !ready && 
 		const embed = res.assetPaths[0]!.split('/').pop()!;
 		assert.ok(md.includes(`![[${embed}]]`), embed);
 		assert.ok(vault.files.get(res.assetPaths[0]!) instanceof ArrayBuffer);
+
+		// the same chapter under note settings, through the backend's parts export
+		const env = {
+			formatDate: (f: string) => f, now: () => new Date(2026, 0, 1, 12, 0), wait: async () => {},
+			paperNote: () => ({ linktext: 'Softmax card', folder: 'Reading/Papers' }), template: async () => '',
+		};
+		const note = { ...DEFAULT_SETTINGS, layout: 'textbook' as const, noteName: '{{paperNote}} - Chapter', paperNoteKeys: 'doi',
+			outputFolder: '{{paperNoteFolder}}/chapters', propertiesMode: 'custom' as const,
+			propertyRows: [{ key: 'up', value: '{{paperNote}}', type: 'link' as const }, { key: 'year', value: '{{year}}', type: 'text' as const }] };
+		const res2 = await run.write({ folder: '', attachments: '', solutions: true, note, env }, () => {});
+		assert.equal(res2.notePath, 'Reading/Papers/chapters/Softmax card - Chapter.md');
+		const md2 = vault.text(res2.notePath);
+		assert.ok(md2.startsWith('---\nup: "[[Softmax card]]"\n'), md2.slice(0, 200));
+		assert.ok(md2.includes('## Intuition first') && md2.includes('## Practice problems') && md2.includes('[!success]- Solution'));
+		assert.ok(md2.includes('[[Papers/sample.pdf#page=') || md2.includes('p. '), 'page citations');
+		assert.ok(res2.assetPaths.length === 1 && md2.includes(`![[${res2.assetPaths[0]!.split('/').pop()!}]]`));
 	} finally {
 		backend.stop();
 	}
