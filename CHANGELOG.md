@@ -1,5 +1,24 @@
 # Changelog
 
+## Backend 0.3.0 (unreleased)
+
+The first of three steps toward note settings in the Obsidian plugin ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md)).
+`export.md` is unchanged byte for byte, pinned by a snapshot test.
+
+### Added
+- **`GET /api/papers/{id}/export.parts`**: the chapter as the note's pieces, for a client that builds its own note
+  from a template: the about line, the one-line summary and the contributions (from the analysis), objectives,
+  intuition, each primer, notation, each section (and inside it its intuition, body, derivations, worked examples
+  and questions, the pages it cites), summary, takeaways, misconceptions, practice, further reading, references,
+  warnings and the figures it embeds. Also the paper's metadata (title, authors, year, field, page count, and the
+  DOI and arXiv id when the first page prints them) and each prerequisite with whether the reader knew it and
+  whether a primer teaches it. Every fragment is made inert by the same pass as `export.md` and is exactly the
+  text `export.md` has in that place. The response carries `version: 1`.
+- **`page_link`** on `export.md` and `export.parts`: a URL template with `{page}` for page citations, for a PDF
+  kept outside the vault, for example `zotero://open-pdf/library/items/<KEY>?page={page}` or
+  `file:///C:/Papers/x.pdf#page={page}`. Allowed schemes: zotero, file, http(s), obsidian; spaces and brackets must
+  be percent-encoded. With both, `page_link` makes the page links and `pdf_link` still names the note's PDF.
+
 ## Obsidian plugin 0.1.1, backend fixes (2026-10-25, released)
 
 ### Changed

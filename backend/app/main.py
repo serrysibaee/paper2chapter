@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from .config import get_settings
 from .estimate import estimate_chapter, paper_tokens
 from .export import render_chapter_html
-from .export_md import render_chapter_markdown
+from .export_md import ChapterParts, render_chapter_markdown, render_chapter_parts
+from .identifiers import paper_ids
 from .jobs import JobManager, UserFacingError
 from .llm import LLMError, get_provider, resolve_selection
 from .llm.registry import get_presets
@@ -257,23 +258,60 @@ def export_html(paper_id: str, request: Request, solutions: bool = True, downloa
     return HTMLResponse(html, headers=headers)
 
 
-@app.get("/api/papers/{paper_id}/export.md")
-def export_markdown(
-    paper_id: str, request: Request, solutions: bool = True,
-    flavor: Literal["obsidian", "commonmark"] = "obsidian",
-    asset_prefix: str = "", pdf_link: str = "",
-):
-    """The chapter as one Markdown note (the Obsidian plugin's format) and the assets it embeds.
+# A page-link template: an absolute URL in one of these schemes, with `{page}` exactly once and nothing that would
+# end a Markdown link or a table cell (encode a space as %20, brackets as %28/%29).
+_PAGE_LINK_RE = re.compile(r"(?:zotero|file|https?|obsidian)://[^\s()<>\[\]{}|\"'`\\]+")
 
-    `asset_prefix` is prepended to every embedded asset name, so figures from different papers
-    do not collide in one vault; `pdf_link` is the PDF's vault path, for page links.
-    """
+
+def _check_export_params(asset_prefix: str, pdf_link: str, page_link: str) -> None:
     if not re.fullmatch(r"[\w .\-]{0,80}", asset_prefix):
         raise HTTPException(400, "Invalid asset_prefix")
     if len(pdf_link) > 300 or re.search(r"[\[\]|#^\n\r]", pdf_link):
         raise HTTPException(400, "Invalid pdf_link")
+    if page_link and (len(page_link) > 500 or page_link.count("{page}") != 1
+                      or not _PAGE_LINK_RE.fullmatch(page_link.replace("{page}", "1"))):
+        raise HTTPException(400, "Invalid page_link: an absolute zotero, file, http(s) or obsidian URL with {page} "
+                                 "once, at most 500 characters, with spaces and brackets percent-encoded")
+
+
+@app.get("/api/papers/{paper_id}/export.md")
+def export_markdown(
+    paper_id: str, request: Request, solutions: bool = True,
+    flavor: Literal["obsidian", "commonmark"] = "obsidian",
+    asset_prefix: str = "", pdf_link: str = "", page_link: str = "",
+):
+    """The chapter as one Markdown note (the Obsidian plugin's format) and the assets it embeds.
+
+    `asset_prefix` is prepended to every embedded asset name, so figures from different papers
+    do not collide in one vault; `pdf_link` is the PDF's vault path, for page links; `page_link`
+    is a URL template with `{page}` for a PDF kept outside the vault, and wins for page links.
+    """
+    _check_export_params(asset_prefix, pdf_link, page_link)
     chapter = store(request).load(paper_id, "chapter", Chapter)
     out = render_chapter_markdown(chapter, flavor=flavor, asset_prefix=asset_prefix,
-                                  pdf_link=pdf_link or None, include_solutions=solutions)
+                                  pdf_link=pdf_link or None, include_solutions=solutions,
+                                  page_link=page_link or None)
     slug = re.sub(r"[^\w\- ]+", "", chapter.title).strip()[:100] or "Chapter"
     return {"markdown": out.markdown, "assets": out.assets, "title": chapter.title, "filename": f"{slug}.md"}
+
+
+@app.get("/api/papers/{paper_id}/export.parts", response_model=ChapterParts)
+def export_parts(
+    paper_id: str, request: Request, solutions: bool = True,
+    flavor: Literal["obsidian", "commonmark"] = "obsidian",
+    asset_prefix: str = "", pdf_link: str = "", page_link: str = "",
+):
+    """The chapter as the note's pieces, each made inert, with the paper's metadata and prerequisites.
+
+    For a client that assembles its own note from a template. Each fragment is exactly the text
+    `export.md` (same parameters) has in that place; see `ChapterParts` in export_md.py.
+    """
+    _check_export_params(asset_prefix, pdf_link, page_link)
+    s = store(request)
+    chapter = s.load(paper_id, "chapter", Chapter)
+    analysis = s.load(paper_id, "analysis", PaperAnalysis) if s.exists(paper_id, "analysis") else None
+    ex = s.load(paper_id, "extraction", Extraction) if s.exists(paper_id, "extraction") else None
+    return render_chapter_parts(chapter, analysis=analysis, ids=paper_ids(ex) if ex else None,
+                                page_count=ex.page_count if ex else None, flavor=flavor,
+                                asset_prefix=asset_prefix, pdf_link=pdf_link or None,
+                                include_solutions=solutions, page_link=page_link or None)
