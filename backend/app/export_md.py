@@ -9,13 +9,24 @@ through community plugins. So every string from the model passes `_safe()`: HTML
 escaped, Templater tags (`<% … %>`) and Dataview inline queries (`` `= …` ``, `` `$= …` ``)
 are neutralised, and only code blocks in an allow-list of languages keep their language, so a
 ```` ```dataviewjs ```` block arrives as inert text. Math and code are left byte-for-byte.
+
+The same renderer also gives the chapter as **parts** (`render_chapter_parts`): each piece of the note (the intuition,
+each primer, each section and its derivations, worked examples and questions, the practice set, ...) as its own
+Markdown fragment, already made inert, with the paper's metadata and its prerequisites. A client that builds its
+own note from a template uses them; every fragment is exactly the text the note has in that place.
+
+Page citations link to the PDF in the vault (`pdf_link`), or follow a URL template (`page_link`, with `{page}`)
+for a PDF kept elsewhere, for example `zotero://open-pdf/library/items/<KEY>?page={page}`.
 """
 
 import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .models import Chapter, Exercise, VerificationResult
+from pydantic import BaseModel
+
+from .identifiers import PaperIds
+from .models import Chapter, Exercise, PaperAnalysis, VerificationResult, VerificationStatus
 
 Flavor = Literal["obsidian", "commonmark"]
 
@@ -89,14 +100,117 @@ class MarkdownExport:
     assets: list[str] = field(default_factory=list)  # asset files (unprefixed) the note embeds
 
 
+# --------------------------------------------------------------------------- parts
+
+PARTS_VERSION = 1  # raised when a field changes meaning or goes away; new fields keep the version
+
+
+class PaperInfo(BaseModel):
+    title: str
+    authors: list[str]
+    year: str | None = None
+    field: str | None = None
+    doi: str | None = None      # printed on the PDF's first page (see identifiers.py)
+    arxiv: str | None = None
+    page_count: int | None = None
+
+
+class PrerequisitePart(BaseModel):
+    id: str
+    name: str
+    why_needed: str
+    level: str
+    known: bool                 # the reader said they know it
+    primed: bool                # the chapter teaches it in a primer
+
+
+class PrimerPart(BaseModel):
+    prerequisite_id: str
+    title: str
+    md: str
+
+
+class DerivationPart(BaseModel):
+    title: str
+    md: str
+
+
+class ExamplePart(BaseModel):
+    title: str
+    check: VerificationStatus | None
+    md: str
+
+
+class SectionPart(BaseModel):
+    id: str
+    number: int
+    title: str
+    pages: list[int]            # pages of the paper the section cites, captions included
+    intuition: str
+    body: str
+    derivations: list[DerivationPart]
+    worked_examples: list[ExamplePart]
+    check_questions: list[str]  # each a question callout, solution folded inside
+    md: str                     # everything the note has under the section's heading
+
+
+class ChapterParts(BaseModel):
+    version: int = PARTS_VERSION
+    paper_id: str
+    title: str
+    generated_at: str
+    provider: str
+    model: str
+    audience: str
+    flavor: Flavor
+    paper: PaperInfo
+    prerequisites: list[PrerequisitePart]
+    about: str
+    one_line: str
+    new_or_surprising: str
+    objectives: str
+    intuition: str
+    primers: list[PrimerPart]
+    notation: str
+    sections: list[SectionPart]
+    summary: str
+    takeaways: str
+    misconceptions: str
+    practice: list[str]
+    further_reading: str
+    references: str
+    warnings: str
+    assets: list[str]
+
+
+@dataclass
+class _Built:
+    """The note's pieces, made in the order the note shows them (asset and exercise numbering depend on it)."""
+    about: str
+    objectives: str
+    intuition: str
+    primers: list[PrimerPart]
+    notation: str
+    sections: list[SectionPart]
+    summary: str
+    takeaways: str
+    misconceptions: str
+    practice: list[str]
+    further_reading: str
+    references: str
+    warnings: str
+
+
 class _Writer:
     def __init__(self, ch: Chapter, flavor: Flavor, asset_prefix: str, pdf_link: str | None,
-                 include_solutions: bool):
+                 include_solutions: bool, page_link: str | None = None):
         self.ch = ch
         self.obsidian = flavor == "obsidian"
         self.prefix = asset_prefix
         self.pdf = pdf_link
+        self.page_link = page_link  # a URL template with {page}; validated by the API
         self.solutions = include_solutions
+        self.pages: set[int] = set()  # pages cited since the last reset (one section's)
         self.ref_numbers = {r.id: (r.number or i + 1) for i, r in enumerate(ch.references)}
         self.figures = {f.id: f for f in ch.figures}
         self.tables = {t.id: t for t in ch.tables}
@@ -116,8 +230,7 @@ class _Writer:
             if key.startswith("?"):
                 parts.append(f"⚠ unresolved {key[1:]}")
             elif re.fullmatch(r"p\d+", key):
-                page = key[1:]
-                parts.append(f"[[{self.pdf}#page={page}|p. {page}]]" if (self.obsidian and self.pdf) else f"p. {page}")
+                parts.append(self._page_ref(key[1:]))
             elif key in self.ref_numbers:
                 n = self.ref_numbers[key]
                 parts.append(f"[[#^ref-{key}|{n}]]" if self.obsidian else f"[{n}](#ref-{key})")
@@ -140,6 +253,13 @@ class _Writer:
         return ""
 
     def _page(self, page: int) -> str:
+        return self._page_ref(str(page))
+
+    def _page_ref(self, page: str) -> str:
+        """A page of the paper: a link by the template, else to the PDF in the vault, else plain text."""
+        self.pages.add(int(page))
+        if self.page_link:
+            return f"[p. {page}]({self.page_link.replace('{page}', page)})"
         return f"[[{self.pdf}#page={page}|p. {page}]]" if (self.obsidian and self.pdf) else f"p. {page}"
 
     @staticmethod
@@ -183,93 +303,166 @@ class _Writer:
 
     # ---------------------------------------------------------------- document
 
+    def _primer(self, p) -> PrimerPart:
+        parts = [self.md(p.intuition_md), self.md(p.explanation_md)]
+        parts += [self.math(f) for f in p.key_formulas_latex]
+        if p.example_md:
+            parts.append("**Example.** " + self.md(p.example_md))
+        parts.append(self.exercise(p.check_question, "Check"))
+        return PrimerPart(prerequisite_id=_plain(p.prerequisite_id), title=_plain(p.title),
+                          md="\n\n".join(x for x in parts if x))
+
+    def _section(self, i: int, s) -> SectionPart:
+        self.pages = set()
+        parts: list[str] = []  # everything under the section's heading, in the note's order
+        intuition = ""
+        if s.intuition_md:
+            intuition = self.md(s.intuition_md)
+            parts.append(self.callout("tip", "Intuition", intuition))
+        body = self.md(s.body_md)
+        parts.append(body)
+        derivations = []
+        for d, deriv in enumerate(s.derivations):
+            title = _plain(deriv.title)
+            steps = []
+            if deriv.goal_md:
+                steps.append(self.md(deriv.goal_md))
+            for k, step in enumerate(deriv.steps, 1):
+                steps.append(f"**Step {k}.**{self.mark(f'deriv:{s.id}:{d}:{k - 1}')} *{_plain(step.justification)}*\n\n"
+                             + self.math(step.latex) + "\n\n" + self.md(step.explanation_md))
+            steps.append("**Result:**\n\n" + self.math(deriv.result_latex))
+            parts += [f"### Derivation: {title}", *steps]
+            derivations.append(DerivationPart(title=title, md="\n\n".join(x for x in steps if x)))
+        examples = []
+        for e, ex in enumerate(s.worked_examples):
+            key = f"example:{s.id}:{e}"
+            title = _plain(ex.title)
+            steps = "\n".join(f"{n}. {self.md(st)}" for n, st in enumerate(ex.solution_steps_md, 1))
+            text = self.md(ex.problem_md) + "\n\n" + steps + "\n\n**Answer:** " + self.md(ex.answer_md)
+            parts.append(self.callout("example", f"Worked example: {title}{self.mark(key)}", text))
+            v = self.ch.verification.get(key)
+            examples.append(ExamplePart(title=title, check=v.status if v else None, md=text))
+        questions = []
+        if s.check_questions:
+            questions = [self.exercise(q) for q in s.check_questions]
+            parts += ["### Check your understanding", *questions]
+        return SectionPart(id=_plain(s.id), number=i, title=_plain(s.title), pages=sorted(self.pages),
+                           intuition=intuition, body=body, derivations=derivations, worked_examples=examples,
+                           check_questions=questions, md="\n\n".join(x for x in parts if x))
+
+    def _further_reading(self) -> str:
+        items = []
+        for fr in self.ch.further_reading:
+            if fr.ref_id and fr.ref_id in self.ref_numbers:
+                n = self.ref_numbers[fr.ref_id]
+                tag = f"([[#^ref-{fr.ref_id}|ref. {n}]])" if self.obsidian else f"([ref. {n}](#ref-{fr.ref_id}))"
+            else:
+                tag = "*(suggested by the model; not from the paper: verify)*"
+            year = f", {_plain(fr.year)}" if fr.year else ""
+            items.append(f"- **{_plain(fr.title)}**, {_plain(fr.authors)}{year}. {self.md(fr.why)} {tag}")
+        return "\n".join(items)
+
+    def _references(self) -> str:
+        lines = []
+        for ref in self.ch.references:
+            n = self.ref_numbers[ref.id]
+            anchor = f" ^ref-{ref.id}" if self.obsidian else ""
+            lead = "" if self.obsidian else f'<a id="ref-{ref.id}"></a>'
+            lines.append(f"{n}. {lead}{_plain(ref.text)}{anchor}")
+        return "\n".join(lines)
+
+    def build(self) -> _Built:
+        """Every piece of the note, made once and in the note's order."""
+        ch = self.ch
+        by = f" by {_plain(', '.join(ch.paper_authors))}" if ch.paper_authors else ""
+        src = f"[[{self.pdf}|{_plain(ch.paper_title)}]]" if (self.obsidian and self.pdf) else f"*{_plain(ch.paper_title)}*"
+        legend = ("Marks: ✅ checked automatically · ❌ check failed · ➖ not checkable."
+                  if self.obsidian else "")
+        about = (f"A textbook chapter based on {src}{by}. Generated with {_plain(ch.provider)}/"
+                 f"{_plain(ch.model)}; machine-written, so verify important details against the "
+                 f"paper. {legend}".strip())
+        objectives = "\n".join(f"- {self.md(o)}" for o in ch.learning_objectives)
+        intuition = self.md(ch.intuition_md)
+        primers = [self._primer(p) for p in ch.primers]
+        notation = ""
+        if ch.notation:
+            rows = "\n".join(f"| ${n.symbol_latex.strip()}$ | {_plain(n.meaning)} |" for n in ch.notation)
+            notation = "| Symbol | Meaning |\n|---|---|\n" + rows
+        sections = [self._section(i, s) for i, s in enumerate(ch.sections, 1)]
+        summary = self.md(ch.summary_md)
+        takeaways = "\n".join(f"- {self.md(t)}" for t in ch.key_takeaways)
+        misconceptions = "\n".join(f"- {self.md(t)}" for t in ch.common_misconceptions)
+        practice = []
+        if ch.practice:
+            self.n_exercise = 0
+            practice = [self.exercise(q) for q in ch.practice]
+        return _Built(about=about, objectives=objectives, intuition=intuition, primers=primers, notation=notation,
+                      sections=sections, summary=summary, takeaways=takeaways, misconceptions=misconceptions,
+                      practice=practice, further_reading=self._further_reading(), references=self._references(),
+                      warnings="\n".join(f"- {_plain(w)}" for w in ch.warnings))
+
     def render(self) -> str:
         ch = self.ch
+        b = self.build()
         out: list[str] = []
         a = out.append
         if self.obsidian:
             a(self.frontmatter())
         a(f"# {_plain(ch.title)}")
-        by = f" by {_plain(', '.join(ch.paper_authors))}" if ch.paper_authors else ""
-        src = f"[[{self.pdf}|{_plain(ch.paper_title)}]]" if (self.obsidian and self.pdf) else f"*{_plain(ch.paper_title)}*"
-        legend = ("Marks: ✅ checked automatically · ❌ check failed · ➖ not checkable."
-                  if self.obsidian else "")
-        a(self.callout("info", "About this chapter",
-                       f"A textbook chapter based on {src}{by}. Generated with {_plain(ch.provider)}/"
-                       f"{_plain(ch.model)}; machine-written, so verify important details against the "
-                       f"paper. {legend}".strip()))
+        a(self.callout("info", "About this chapter", b.about))
         if ch.learning_objectives:
-            a(self.callout("abstract", "Learning objectives",
-                           "\n".join(f"- {self.md(o)}" for o in ch.learning_objectives)))
-        a("## Intuition first\n\n" + self.md(ch.intuition_md))
-
-        if ch.primers:
+            a(self.callout("abstract", "Learning objectives", b.objectives))
+        a("## Intuition first\n\n" + b.intuition)
+        if b.primers:
             a("## Prerequisites")
-            for p in ch.primers:
-                parts = [f"### {_plain(p.title)}", self.md(p.intuition_md), self.md(p.explanation_md)]
-                parts += [self.math(f) for f in p.key_formulas_latex]
-                if p.example_md:
-                    parts.append("**Example.** " + self.md(p.example_md))
-                parts.append(self.exercise(p.check_question, "Check"))
-                a("\n\n".join(x for x in parts if x))
-
-        if ch.notation:
-            rows = "\n".join(f"| ${n.symbol_latex.strip()}$ | {_plain(n.meaning)} |" for n in ch.notation)
-            a("## Notation\n\n| Symbol | Meaning |\n|---|---|\n" + rows)
-
-        for i, s in enumerate(ch.sections, 1):
-            parts = [f"## {i}. {_plain(s.title)}"]
-            if s.intuition_md:
-                parts.append(self.callout("tip", "Intuition", self.md(s.intuition_md)))
-            parts.append(self.md(s.body_md))
-            for d, deriv in enumerate(s.derivations):
-                parts.append(f"### Derivation: {_plain(deriv.title)}")
-                if deriv.goal_md:
-                    parts.append(self.md(deriv.goal_md))
-                for k, step in enumerate(deriv.steps, 1):
-                    parts.append(f"**Step {k}.**{self.mark(f'deriv:{s.id}:{d}:{k - 1}')} *{_plain(step.justification)}*\n\n"
-                                 + self.math(step.latex) + "\n\n" + self.md(step.explanation_md))
-                parts.append("**Result:**\n\n" + self.math(deriv.result_latex))
-            for e, ex in enumerate(s.worked_examples):
-                steps = "\n".join(f"{n}. {self.md(st)}" for n, st in enumerate(ex.solution_steps_md, 1))
-                parts.append(self.callout(
-                    "example", f"Worked example: {_plain(ex.title)}{self.mark(f'example:{s.id}:{e}')}",
-                    self.md(ex.problem_md) + "\n\n" + steps + "\n\n**Answer:** " + self.md(ex.answer_md)))
-            if s.check_questions:
-                parts.append("### Check your understanding")
-                parts += [self.exercise(q) for q in s.check_questions]
-            a("\n\n".join(x for x in parts if x))
-
-        a("## Summary\n\n" + self.md(ch.summary_md))
+            out += [f"### {p.title}" + (f"\n\n{p.md}" if p.md else "") for p in b.primers]
+        if b.notation:
+            a("## Notation\n\n" + b.notation)
+        out += [f"## {s.number}. {s.title}" + (f"\n\n{s.md}" if s.md else "") for s in b.sections]
+        a("## Summary\n\n" + b.summary)
         if ch.key_takeaways:
-            a("### Key takeaways\n\n" + "\n".join(f"- {self.md(t)}" for t in ch.key_takeaways))
+            a("### Key takeaways\n\n" + b.takeaways)
         if ch.common_misconceptions:
-            a("### Common misconceptions\n\n" + "\n".join(f"- {self.md(t)}" for t in ch.common_misconceptions))
-        if ch.practice:
-            self.n_exercise = 0
-            a("## Practice problems\n\n" + "\n\n".join(self.exercise(q) for q in ch.practice))
+            a("### Common misconceptions\n\n" + b.misconceptions)
+        if b.practice:
+            a("## Practice problems\n\n" + "\n\n".join(b.practice))
         if ch.further_reading:
-            items = []
-            for fr in ch.further_reading:
-                if fr.ref_id and fr.ref_id in self.ref_numbers:
-                    n = self.ref_numbers[fr.ref_id]
-                    tag = f"([[#^ref-{fr.ref_id}|ref. {n}]])" if self.obsidian else f"([ref. {n}](#ref-{fr.ref_id}))"
-                else:
-                    tag = "*(suggested by the model; not from the paper: verify)*"
-                year = f", {_plain(fr.year)}" if fr.year else ""
-                items.append(f"- **{_plain(fr.title)}**, {_plain(fr.authors)}{year}. {self.md(fr.why)} {tag}")
-            a("## Further reading\n\n" + "\n".join(items))
+            a("## Further reading\n\n" + b.further_reading)
         if ch.references:
-            lines = []
-            for ref in ch.references:
-                n = self.ref_numbers[ref.id]
-                anchor = f" ^ref-{ref.id}" if self.obsidian else ""
-                lead = "" if self.obsidian else f'<a id="ref-{ref.id}"></a>'
-                lines.append(f"{n}. {lead}{_plain(ref.text)}{anchor}")
-            a("## References (from the paper)\n\n" + "\n".join(lines))
+            a("## References (from the paper)\n\n" + b.references)
         if ch.warnings:
-            a(self.callout("warning", "Generation notes", "\n".join(f"- {_plain(w)}" for w in ch.warnings)))
+            a(self.callout("warning", "Generation notes", b.warnings))
         return "\n\n".join(x for x in out if x).rstrip() + "\n"
+
+    def parts(self, analysis: PaperAnalysis | None, ids: PaperIds | None, page_count: int | None) -> ChapterParts:
+        ch = self.ch
+        b = self.build()
+        known = set(ch.options.known_prerequisites)
+        primed = {p.prerequisite_id for p in ch.primers}
+        if analysis is not None:
+            prereqs = [PrerequisitePart(id=_plain(p.id), name=_plain(p.name), why_needed=self.md(p.why_needed),
+                                        level=p.level, known=p.id in known, primed=p.id in primed)
+                       for p in analysis.prerequisites]
+        else:  # without the analysis, the primers and the reader's ticks still name them
+            prereqs = [PrerequisitePart(id=_plain(p.prerequisite_id), name=_plain(p.title), why_needed="", level="",
+                                        known=p.prerequisite_id in known, primed=True) for p in ch.primers]
+            prereqs += [PrerequisitePart(id=_plain(k), name=_plain(k), why_needed="", level="", known=True,
+                                         primed=False) for k in ch.options.known_prerequisites if k not in primed]
+        ids = ids or PaperIds()
+        paper = PaperInfo(title=_plain(ch.paper_title), authors=[_plain(x) for x in ch.paper_authors],
+                          year=_plain(analysis.year) if analysis and analysis.year else None,
+                          field=_plain(analysis.field) if analysis and analysis.field else None,
+                          doi=ids.doi, arxiv=ids.arxiv, page_count=page_count)
+        one_line = self.md(analysis.one_sentence_summary) if analysis else ""
+        new = "\n".join(f"- {self.md(c)}" for c in analysis.key_contributions) if analysis else ""
+        return ChapterParts(
+            paper_id=_plain(ch.paper_id), title=_plain(ch.title), generated_at=_plain(ch.generated_at),
+            provider=_plain(ch.provider), model=_plain(ch.model), audience=ch.options.audience,
+            flavor="obsidian" if self.obsidian else "commonmark", paper=paper, prerequisites=prereqs,
+            about=b.about, one_line=one_line, new_or_surprising=new, objectives=b.objectives, intuition=b.intuition,
+            primers=b.primers, notation=b.notation, sections=b.sections, summary=b.summary, takeaways=b.takeaways,
+            misconceptions=b.misconceptions, practice=b.practice, further_reading=b.further_reading,
+            references=b.references, warnings=b.warnings, assets=self.assets)
 
     def frontmatter(self) -> str:
         ch = self.ch
@@ -310,6 +503,23 @@ def render_chapter_markdown(
     asset_prefix: str = "",
     pdf_link: str | None = None,
     include_solutions: bool = True,
+    page_link: str | None = None,
 ) -> MarkdownExport:
-    w = _Writer(chapter, flavor, asset_prefix, pdf_link or None, include_solutions)
+    w = _Writer(chapter, flavor, asset_prefix, pdf_link or None, include_solutions, page_link or None)
     return MarkdownExport(markdown=w.render(), assets=w.assets)
+
+
+def render_chapter_parts(
+    chapter: Chapter,
+    analysis: PaperAnalysis | None = None,
+    ids: PaperIds | None = None,
+    page_count: int | None = None,
+    flavor: Flavor = "obsidian",
+    asset_prefix: str = "",
+    pdf_link: str | None = None,
+    include_solutions: bool = True,
+    page_link: str | None = None,
+) -> ChapterParts:
+    """The chapter as the note's pieces, each made inert, for a client that assembles its own note."""
+    w = _Writer(chapter, flavor, asset_prefix, pdf_link or None, include_solutions, page_link or None)
+    return w.parts(analysis, ids, page_count)

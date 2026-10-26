@@ -1,0 +1,416 @@
+{
+ "paper_id": "2ca5a031cb92",
+ "title": "Softmax-Weighted Averages",
+ "generated_at": "2026-10-26T17:51:48+00:00",
+ "provider": "mock",
+ "model": "mock",
+ "options": {
+  "audience": "undergraduate",
+  "known_prerequisites": [
+   "exponential-function"
+  ],
+  "focus": "",
+  "include_python": true
+ },
+ "paper_title": "Softmax Weighting for Robust Averaging",
+ "paper_authors": [
+  "(mock) A. Author"
+ ],
+ "learning_objectives": [
+  "Explain why softmax produces valid weights",
+  "Derive the softmax of two scores as a logistic function",
+  "Implement a numerically stable softmax in Python"
+ ],
+ "intuition_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)*\n\nImagine asking several friends for advice and trusting some more than others. Softmax turns *how much you trust each friend* into percentages that add up to 100%, and the final advice is the trust-weighted average.",
+ "primers": [
+  {
+   "prerequisite_id": "weighted-averages",
+   "title": "Weighted averages",
+   "intuition_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)* A quick refresher on weighted averages.",
+   "explanation_md": "The exponential $e^x$ is always positive and grows quickly.",
+   "key_formulas_latex": [
+    "e^{a+b} = e^a e^b"
+   ],
+   "example_md": "$e^0 = 1$ and $e^1 \\approx 2.718$.",
+   "check_question": {
+    "id": "primer1",
+    "kind": "multiple_choice",
+    "difficulty": "easy",
+    "prompt_md": "Which value is $e^0$?",
+    "choices": [
+     "0",
+     "1",
+     "e"
+    ],
+    "correct_choice": 1,
+    "answer_md": "1",
+    "explanation_md": "Any nonzero number to the power 0 equals 1.",
+    "numeric_answer": null,
+    "tolerance": null,
+    "answer_check": null,
+    "starter_code": null,
+    "solution_code": null,
+    "test_code": null
+   }
+  },
+  {
+   "prerequisite_id": "vectors-dot-products",
+   "title": "Vectors and dot products",
+   "intuition_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)* A quick refresher on vectors and dot products.",
+   "explanation_md": "The exponential $e^x$ is always positive and grows quickly.",
+   "key_formulas_latex": [
+    "e^{a+b} = e^a e^b"
+   ],
+   "example_md": "$e^0 = 1$ and $e^1 \\approx 2.718$.",
+   "check_question": {
+    "id": "primer2",
+    "kind": "multiple_choice",
+    "difficulty": "easy",
+    "prompt_md": "Which value is $e^0$?",
+    "choices": [
+     "0",
+     "1",
+     "e"
+    ],
+    "correct_choice": 1,
+    "answer_md": "1",
+    "explanation_md": "Any nonzero number to the power 0 equals 1.",
+    "numeric_answer": null,
+    "tolerance": null,
+    "answer_check": null,
+    "starter_code": null,
+    "solution_code": null,
+    "test_code": null
+   }
+  }
+ ],
+ "sections": [
+  {
+   "id": "s1",
+   "title": "From scores to weights",
+   "intuition_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)* Larger scores should get larger, but never negative, weights.",
+   "body_md": "Given scores $z_1, \\dots, z_n$, softmax defines\n\n$$w_i = \\frac{e^{z_i}}{\\sum_{j=1}^n e^{z_j}}$$\n\nEvery $w_i > 0$ and $\\sum_i w_i = 1$, so the $w_i$ are valid weights [@R1]. The paper introduces this on page 1 [@p1].\n\n{{fig:F1}}\n",
+   "derivations": [
+    {
+     "title": "Softmax of two scores is a logistic function",
+     "goal_md": "Show that $w_1 = \\sigma(z_1 - z_2)$ where $\\sigma(t) = 1/(1+e^{-t})$.",
+     "steps": [
+      {
+       "latex": "w_1 = \\frac{e^{z_1}}{e^{z_1} + e^{z_2}}",
+       "explanation_md": "Definition of softmax with $n=2$.",
+       "justification": "definition (E1)",
+       "check": null
+      },
+      {
+       "latex": "w_1 = \\frac{1}{1 + e^{z_2 - z_1}}",
+       "explanation_md": "Divide numerator and denominator by $e^{z_1}$.",
+       "justification": "algebra",
+       "check": {
+        "lhs": "exp(z1)/(exp(z1)+exp(z2))",
+        "rhs": "1/(1+exp(z2-z1))"
+       }
+      },
+      {
+       "latex": "w_1 = \\sigma(z_1 - z_2)",
+       "explanation_md": "Recognise the logistic function with $t = z_1 - z_2$.",
+       "justification": "definition of the logistic function",
+       "check": {
+        "lhs": "1/(1+exp(z2-z1))",
+        "rhs": "1/(1+exp(-(z1-z2)))"
+       }
+      }
+     ],
+     "result_latex": "w_1 = \\sigma(z_1 - z_2)"
+    }
+   ],
+   "worked_examples": [
+    {
+     "title": "Weights for scores (0, ln 3)",
+     "problem_md": "Compute the softmax weights for $z = (0, \\ln 3)$.",
+     "solution_steps_md": [
+      "$e^0 = 1$, $e^{\\ln 3} = 3$.",
+      "Sum is $4$, so $w = (1/4, 3/4)$."
+     ],
+     "answer_md": "$w = (0.25, 0.75)$",
+     "check": {
+      "lhs": "exp(log(3))/(exp(0)+exp(log(3)))",
+      "rhs": "3/4"
+     }
+    }
+   ],
+   "check_questions": [
+    {
+     "id": "s1-q1",
+     "kind": "multiple_choice",
+     "difficulty": "easy",
+     "prompt_md": "If all scores are equal, what are the softmax weights?",
+     "choices": [
+      "All 0",
+      "All $1/n$",
+      "All 1"
+     ],
+     "correct_choice": 1,
+     "answer_md": "All $1/n$",
+     "explanation_md": "Equal numerators $e^{z}$ divided by $n e^{z}$ give $1/n$.",
+     "numeric_answer": null,
+     "tolerance": null,
+     "answer_check": null,
+     "starter_code": null,
+     "solution_code": null,
+     "test_code": null
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "title": "Weighted averages in practice",
+   "intuition_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)* Larger scores should get larger, but never negative, weights.",
+   "body_md": "Given scores $z_1, \\dots, z_n$, softmax defines\n\n$$w_i = \\frac{e^{z_i}}{\\sum_{j=1}^n e^{z_j}}$$\n\nEvery $w_i > 0$ and $\\sum_i w_i = 1$, so the $w_i$ are valid weights [@R1]. The paper introduces this on page 1 [@p1].\n\n{{fig:F1}}\n",
+   "derivations": [
+    {
+     "title": "Softmax of two scores is a logistic function",
+     "goal_md": "Show that $w_1 = \\sigma(z_1 - z_2)$ where $\\sigma(t) = 1/(1+e^{-t})$.",
+     "steps": [
+      {
+       "latex": "w_1 = \\frac{e^{z_1}}{e^{z_1} + e^{z_2}}",
+       "explanation_md": "Definition of softmax with $n=2$.",
+       "justification": "definition (E1)",
+       "check": null
+      },
+      {
+       "latex": "w_1 = \\frac{1}{1 + e^{z_2 - z_1}}",
+       "explanation_md": "Divide numerator and denominator by $e^{z_1}$.",
+       "justification": "algebra",
+       "check": {
+        "lhs": "exp(z1)/(exp(z1)+exp(z2))",
+        "rhs": "1/(1+exp(z2-z1))"
+       }
+      },
+      {
+       "latex": "w_1 = \\sigma(z_1 - z_2)",
+       "explanation_md": "Recognise the logistic function with $t = z_1 - z_2$.",
+       "justification": "definition of the logistic function",
+       "check": {
+        "lhs": "1/(1+exp(z2-z1))",
+        "rhs": "1/(1+exp(-(z1-z2)))"
+       }
+      }
+     ],
+     "result_latex": "w_1 = \\sigma(z_1 - z_2)"
+    }
+   ],
+   "worked_examples": [
+    {
+     "title": "Weights for scores (0, ln 3)",
+     "problem_md": "Compute the softmax weights for $z = (0, \\ln 3)$.",
+     "solution_steps_md": [
+      "$e^0 = 1$, $e^{\\ln 3} = 3$.",
+      "Sum is $4$, so $w = (1/4, 3/4)$."
+     ],
+     "answer_md": "$w = (0.25, 0.75)$",
+     "check": {
+      "lhs": "exp(log(3))/(exp(0)+exp(log(3)))",
+      "rhs": "3/4"
+     }
+    }
+   ],
+   "check_questions": [
+    {
+     "id": "s2-q1",
+     "kind": "multiple_choice",
+     "difficulty": "easy",
+     "prompt_md": "If all scores are equal, what are the softmax weights?",
+     "choices": [
+      "All 0",
+      "All $1/n$",
+      "All 1"
+     ],
+     "correct_choice": 1,
+     "answer_md": "All $1/n$",
+     "explanation_md": "Equal numerators $e^{z}$ divided by $n e^{z}$ give $1/n$.",
+     "numeric_answer": null,
+     "tolerance": null,
+     "answer_check": null,
+     "starter_code": null,
+     "solution_code": null,
+     "test_code": null
+    }
+   ]
+  }
+ ],
+ "summary_md": "*(Mock provider output: configure a real model in Settings for a real chapter.)* Softmax converts arbitrary scores into weights that are positive and sum to one; the output is the weighted average of the values.",
+ "key_takeaways": [
+  "Softmax weights are positive and sum to 1",
+  "Adding a constant to all scores does not change the weights"
+ ],
+ "common_misconceptions": [
+  "Softmax is not the same as normalising by the sum of scores"
+ ],
+ "practice": [
+  {
+   "id": "p1",
+   "kind": "conceptual",
+   "difficulty": "easy",
+   "prompt_md": "Why must softmax weights be positive?",
+   "choices": [],
+   "correct_choice": null,
+   "answer_md": "Because $e^x > 0$ for every real $x$.",
+   "explanation_md": "Each weight is a ratio of positive numbers.",
+   "numeric_answer": null,
+   "tolerance": null,
+   "answer_check": null,
+   "starter_code": null,
+   "solution_code": null,
+   "test_code": null
+  },
+  {
+   "id": "p2",
+   "kind": "math",
+   "difficulty": "medium",
+   "prompt_md": "Compute $w_1$ for scores $z = (2, 0)$. Give 3 decimals.",
+   "choices": [],
+   "correct_choice": null,
+   "answer_md": "$w_1 \\approx 0.881$",
+   "explanation_md": "$w_1 = e^2/(e^2+1) = \\sigma(2) \\approx 0.8808$.",
+   "numeric_answer": 0.881,
+   "tolerance": 0.001,
+   "answer_check": {
+    "lhs": "exp(2)/(exp(2)+1)",
+    "rhs": "0.8808"
+   },
+   "starter_code": null,
+   "solution_code": null,
+   "test_code": null
+  },
+  {
+   "id": "p3",
+   "kind": "python",
+   "difficulty": "medium",
+   "prompt_md": "Implement `softmax(z)` for a list of floats. Subtract the maximum score first for numerical stability.",
+   "choices": [],
+   "correct_choice": null,
+   "answer_md": "See the reference solution.",
+   "explanation_md": "Subtracting $\\max z$ leaves the weights unchanged but avoids overflow.",
+   "numeric_answer": null,
+   "tolerance": null,
+   "answer_check": null,
+   "starter_code": "import math\n\ndef softmax(z):\n    # your code here\n    pass\n",
+   "solution_code": "import math\n\ndef softmax(z):\n    m = max(z)\n    e = [math.exp(v - m) for v in z]\n    s = sum(e)\n    return [v / s for v in e]\n",
+   "test_code": "w = softmax([0.0, math.log(3)])\nassert abs(w[0] - 0.25) < 1e-9 and abs(w[1] - 0.75) < 1e-9\nassert abs(sum(softmax([1000.0, 1000.0, 999.0])) - 1) < 1e-9\n"
+  }
+ ],
+ "further_reading": [
+  {
+   "title": "Reference R1 of the paper",
+   "authors": "see reference list",
+   "year": null,
+   "why": "original source of the idea",
+   "ref_id": "R1"
+  }
+ ],
+ "references": [
+  {
+   "id": "R1",
+   "number": 1,
+   "text": "A. Author. Robust estimation with learned weights. Journal of Examples, 2020."
+  },
+  {
+   "id": "R2",
+   "number": 2,
+   "text": "B. Builder. Combining estimates: a survey of averaging methods. Survey Press, 2018."
+  },
+  {
+   "id": "R3",
+   "number": 3,
+   "text": "C. Coder. Differentiable selection with the softmax function. Proc. ICML, 2019."
+  }
+ ],
+ "figures": [
+  {
+   "id": "F1",
+   "page": 3,
+   "caption": "Figure 1: Softmax weights for three scores.",
+   "image_file": "F1.png",
+   "width": 634,
+   "height": 426
+  }
+ ],
+ "tables": [],
+ "notation": [
+  {
+   "symbol_latex": "z_i",
+   "meaning": "score of item i"
+  }
+ ],
+ "verification": {
+  "ex:primer1": {
+   "status": "verified",
+   "method": "structure",
+   "detail": "answer key is consistent with the choices"
+  },
+  "ex:primer2": {
+   "status": "verified",
+   "method": "structure",
+   "detail": "answer key is consistent with the choices"
+  },
+  "ex:s1-q1": {
+   "status": "verified",
+   "method": "structure",
+   "detail": "answer key is consistent with the choices"
+  },
+  "ex:s2-q1": {
+   "status": "verified",
+   "method": "structure",
+   "detail": "answer key is consistent with the choices"
+  },
+  "deriv:s1:0:1": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "sides agree at 12 random points"
+  },
+  "deriv:s1:0:2": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "sides agree at 12 random points"
+  },
+  "example:s1:0": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "evaluates to 0.75 on both sides"
+  },
+  "deriv:s2:0:1": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "sides agree at 12 random points"
+  },
+  "deriv:s2:0:2": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "sides agree at 12 random points"
+  },
+  "example:s2:0": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "evaluates to 0.75 on both sides"
+  },
+  "ex:p2": {
+   "status": "verified",
+   "method": "sympy numeric check",
+   "detail": "evaluates to 0.880797 on both sides"
+  },
+  "ex:p3": {
+   "status": "verified",
+   "method": "python tests (subprocess sandbox)",
+   "detail": "all tests passed"
+  }
+ },
+ "warnings": [],
+ "usage": {
+  "calls": 6,
+  "input_tokens": 7807,
+  "output_tokens": 2593,
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "cost_usd": 0.0
+ }
+}

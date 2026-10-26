@@ -1,0 +1,62 @@
+{
+ "title": "Softmax Weighting for Robust Averaging",
+ "authors": [
+  "(mock) A. Author"
+ ],
+ "year": null,
+ "field": "Machine learning",
+ "one_sentence_summary": "*(Mock provider output: configure a real model in Settings for a real chapter.)* The paper proposes weighting inputs with a softmax.",
+ "problem": "How to combine several values according to learned relevance scores.",
+ "key_contributions": [
+  "A softmax-weighted average of values",
+  "A scaling rule for scores"
+ ],
+ "method_overview": "Scores are turned into weights with softmax; the output is a weighted sum.",
+ "key_results": [
+  "Weighted averaging improves accuracy in the mock experiment."
+ ],
+ "limitations": [
+  "Mock analysis - no real results."
+ ],
+ "sections": [
+  {
+   "title": "Introduction",
+   "summary": "Motivation."
+  }
+ ],
+ "key_equations": [
+  {
+   "id": "E1",
+   "latex": "\\mathrm{softmax}(z)_i = \\frac{e^{z_i}}{\\sum_j e^{z_j}}",
+   "meaning": "turns scores into positive weights that sum to one",
+   "page": 1
+  }
+ ],
+ "notation": [
+  {
+   "symbol_latex": "z_i",
+   "meaning": "score of item i"
+  }
+ ],
+ "prerequisites": [
+  {
+   "id": "exponential-function",
+   "name": "The exponential function",
+   "why_needed": "softmax exponentiates scores",
+   "level": "foundational"
+  },
+  {
+   "id": "weighted-averages",
+   "name": "Weighted averages",
+   "why_needed": "the output is a weighted average",
+   "level": "foundational"
+  },
+  {
+   "id": "vectors-dot-products",
+   "name": "Vectors and dot products",
+   "why_needed": "scores are dot products",
+   "level": "intermediate"
+  }
+ ],
+ "difficulty": "intermediate"
+}
