@@ -1,9 +1,16 @@
 /* A client for the paper2chapter backend. The transport is injected, so the client runs in Node tests too. */
 import { buildMultipart } from './multipart.ts';
 import type {
-	AppSettings, Estimate, GenerationOptions, MarkdownExport, PaperAnalysis, PaperRecord, PaperStatus, ProviderCheck,
-	Selection,
+	AppSettings, ChapterParts, Estimate, GenerationOptions, MarkdownExport, PaperAnalysis, PaperRecord, PaperStatus,
+	ProviderCheck, Selection,
 } from './types.ts';
+
+export interface ExportOptions {
+	solutions: boolean;
+	assetPrefix: string;
+	pdfLink: string; // the PDF's vault path, for page links and the note's `source_pdf`
+	pageLink?: string; // a URL template with {page}, for a PDF outside the vault
+}
 
 export interface HttpRequest {
 	url: string;
@@ -102,11 +109,21 @@ export class Paper2ChapterClient {
 		return this.json<PaperRecord>('/api/papers', { method: 'POST', body: mp.body, contentType: mp.contentType });
 	}
 
-	exportMarkdown(id: string, opts: { solutions: boolean; assetPrefix: string; pdfLink: string }): Promise<MarkdownExport> {
+	private exportQuery(opts: ExportOptions): string {
 		const q = new URLSearchParams({
 			solutions: String(opts.solutions), flavor: 'obsidian', asset_prefix: opts.assetPrefix, pdf_link: opts.pdfLink,
 		});
-		return this.json<MarkdownExport>(`/api/papers/${id}/export.md?${q.toString()}`);
+		if (opts.pageLink) q.set('page_link', opts.pageLink); // sent only when used: the 0.1.1 request otherwise
+		return q.toString();
+	}
+
+	exportMarkdown(id: string, opts: ExportOptions): Promise<MarkdownExport> {
+		return this.json<MarkdownExport>(`/api/papers/${id}/export.md?${this.exportQuery(opts)}`);
+	}
+
+	/** The chapter as the note's pieces (backend 0.3.0 and later). */
+	exportParts(id: string, opts: ExportOptions): Promise<ChapterParts> {
+		return this.json<ChapterParts>(`/api/papers/${id}/export.parts?${this.exportQuery(opts)}`);
 	}
 
 	async asset(id: string, name: string): Promise<ArrayBuffer> {

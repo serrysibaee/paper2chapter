@@ -1,6 +1,8 @@
 /*
  * Writes a chapter into the vault: one note in the output folder and its figures in an attachments folder beside
- * it. Never overwrites: a taken name gets " 2", " 3", ... The vault is behind a small interface so tests run in Node.
+ * it (or a fixed folder, or wherever Obsidian puts attachments). Never overwrites: a taken name gets " 2", " 3", ...,
+ * or, if the reader chose so, the note is not written at all. The vault is behind a small interface so tests run
+ * in Node.
  */
 
 export interface VaultLike {
@@ -18,6 +20,18 @@ export interface ChapterFiles {
 export interface WriteResult {
 	notePath: string;
 	assetPaths: string[];
+	skipped?: boolean; // the name was taken and the reader chose not to write a second note
+}
+
+export interface WriteOptions {
+	folder: string;
+	attachments: string;
+	title: string;
+	figures?: 'subfolder' | 'obsidian' | 'folder';
+	figuresFolder?: string;
+	onExists?: 'number' | 'skip';
+	/** Obsidian's own choice of path for an attachment (figures: 'obsidian'). */
+	attachmentPath?: (filename: string, notePath: string) => Promise<string>;
 }
 
 /** A file name Obsidian, Windows, macOS and Linux all accept, and that a wikilink can name. */
@@ -64,29 +78,41 @@ export function defuse(text: string): string {
 	return text.replace(/<%/g, '<⁠%');
 }
 
-export async function writeChapter(
-	vault: VaultLike,
-	files: ChapterFiles,
-	opts: { folder: string; attachments: string; title: string },
-): Promise<WriteResult> {
+export async function writeChapter(vault: VaultLike, files: ChapterFiles, opts: WriteOptions): Promise<WriteResult> {
 	const folder = normalizeFolder(opts.folder);
+	const base = safeName(opts.title);
+	if (opts.onExists === 'skip' && await vault.exists(join(folder, `${base}.md`))) {
+		return { notePath: join(folder, `${base}.md`), assetPaths: [], skipped: true };
+	}
 	await ensureFolder(vault, folder);
-	const notePath = await uniquePath(vault, folder, safeName(opts.title), 'md');
+	const notePath = await uniquePath(vault, folder, base, 'md');
 	const noteBase = notePath.split('/').pop()!.replace(/\.md$/, '');
 	// The note's own (unique) name prefixes its figures, so two chapters never share an attachment name.
 	// Letters, digits, space, dot, dash, underscore: what the backend accepts as an asset prefix.
 	const prefix = safeName(noteBase, 60).replace(/[^\p{L}\p{N}_ .-]/gu, '_') + ' - ';
 	const { markdown, assets } = await files.markdown(prefix);
 
-	const attFolder = normalizeFolder(join(folder, opts.attachments || 'attachments'));
+	let text = markdown;
+	const mode = opts.figures === 'folder' && !normalizeFolder(opts.figuresFolder ?? '') ? 'subfolder'
+		: opts.figures === 'obsidian' && !opts.attachmentPath ? 'subfolder' : opts.figures ?? 'subfolder';
+	const attFolder = mode === 'folder' ? normalizeFolder(opts.figuresFolder ?? '')
+		: normalizeFolder(join(folder, opts.attachments || 'attachments'));
 	const assetPaths: string[] = [];
-	if (assets.length) await ensureFolder(vault, attFolder);
+	if (assets.length && mode !== 'obsidian') await ensureFolder(vault, attFolder);
 	for (const name of assets) {
-		const path = join(attFolder, prefix + name);
+		let path: string;
+		if (mode === 'obsidian') {
+			path = normalizeFolder(await opts.attachmentPath!(prefix + name, notePath));
+			await ensureFolder(vault, path.split('/').slice(0, -1).join('/'));
+			const given = path.split('/').pop()!;
+			if (given !== prefix + name) text = text.split(`![[${prefix}${name}]]`).join(`![[${given}]]`);
+		} else {
+			path = join(attFolder, prefix + name);
+		}
 		if (await vault.exists(path)) continue;
 		await vault.createBinary(path, await files.asset(name));
 		assetPaths.push(path);
 	}
-	await vault.createText(notePath, defuse(markdown));
+	await vault.createText(notePath, defuse(text));
 	return { notePath, assetPaths };
 }

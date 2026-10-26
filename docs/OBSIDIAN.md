@@ -136,8 +136,103 @@ on every new file.
 | Backend folder | | The `backend/` folder of your checkout. |
 | Python interpreter | automatic | `backend/.venv`, else `python` / `python3` on PATH. |
 | Provider, model, effort | from the backend | Saved to the backend with **Save model**. |
-| Folder / Figures subfolder | `Paper chapters` / `attachments` | |
+
+Everything below is optional. **The defaults write the same note, in the same place, as plugin 0.1.1**, and
+settings saved by 0.1.1 are carried over as they were.
+
+### Sources
+
+| Setting | Default | |
+|---|---|---|
+| PDFs in the vault | on | Offered in the paper picker (*Generate a chapter from a PDF…*). Right-clicking a PDF always works. |
+| Folders outside the vault | none | Folders on this computer, one per line, whose PDFs the picker offers. The PDF is read and uploaded to the backend; it is never copied into the vault. Page citations link to the file (`file:///…#page=4`). |
+| Zotero | off | Adds *Search Zotero…* to the picker: type a title, an author or a year. Needs Zotero 7 or later running with its local API on (*Zotero → Settings → Advanced → Allow other applications on this computer to communicate with Zotero*). **Check Zotero** says whether it answers. Read-only: nothing in Zotero changes. Page citations open the PDF in Zotero's reader (`zotero://open-pdf/…?page=4`). |
+| Zotero address | `http://127.0.0.1:23119` | |
+| Find the paper's own note | off | If your vault keeps a note for each paper (a literature note, a reference card), the properties to find it by, one per line, tried in order, for example `doi`, `arxiv`, `zotero`, `source`, `title`; `file.name` is the note's own name. A property may hold the DOI (with or without `https://doi.org/`), the arXiv id or URL, a Zotero key or `zotero://` link, the PDF's path, or the title. The first property that matches **exactly one** note wins. The note it finds gives the tokens `{{paperNote}}` and `{{paperNoteFolder}}`. |
+| Look for it in these folders | the whole vault | |
+
+### Chapters
+
+| Setting | Default | |
+|---|---|---|
+| Folder | `Paper chapters` | A template: `Reading/{{year}}`, `{{paperNoteFolder}}/chapters`, … |
+| Note name | `{{paperTitle}}` | A template: `{{firstAuthor}} {{year}} - {{paperTitle}}`, `{{paperNote}} - Chapter`, … |
+| Figures | in a subfolder beside the note | Or where Obsidian puts attachments (*Settings → Files and links*), or a fixed folder. Each figure's name starts with the note's name, so two chapters never share one. |
+| When the name is taken | write a second note, numbered | Or write nothing (the chapter stays on the backend; *Import a chapter generated earlier* writes it later). |
+| Quiet hours | none | For example `23:00-06:00`: no note is written then (useful when other tools work in the vault at night); a chapter that finishes in them waits for their end. |
 | Default audience, Python exercises, Include solutions, Open the note | | |
+
+**Tokens** fill folder, name, heading, page-link and property templates: `{{title}}` (the chapter's),
+`{{paperTitle}}`, `{{authors}}`, `{{firstAuthor}}`, `{{year}}`, `{{field}}`, `{{doi}}`, `{{arxiv}}`,
+`{{zoteroKey}}`, `{{zoteroPdfKey}}`, `{{pdf}}`, `{{pdfLink}}`, `{{paperNote}}`, `{{paperNoteFolder}}`,
+`{{paperSlug}}`, `{{paperId}}`, `{{provider}}`, `{{model}}`, `{{audience}}`, `{{generated}}`, and
+`{{date:FORMAT}}` (a [moment.js format](https://momentjs.com/docs/#/displaying/format/), e.g.
+`{{date:YYYY-MM-DD}}`). A token the paper has no value for is empty; a name that is no token is left as you
+typed it, and the settings point it out.
+
+### Note format
+
+| Setting | Default | |
+|---|---|---|
+| Layout | paper2chapter | **paper2chapter**: the note as the backend writes it (above). **Textbook**: the one-line summary, what the paper adds, objectives, intuition, *What it assumes* (the prerequisites, then their primers), notation, the sections, summary, practice, references. **My template note**: your own. |
+| Template note | | A note with placeholders for the chapter's pieces and with tokens (below). |
+| Section heading | `{{n}}. {{title}}` | With `{{page}}` (the first page the section cites) and `{{pages}}`, e.g. `1.{{n}} {{title}}{{#page}} — p. {{page}}{{/page}}`. |
+| Section heading level | `##` | Derivations, primers and *Check your understanding* sit one level below. |
+| Worked examples | in their sections | Or gathered in one place, where the template puts `{{workedExamples}}`. |
+| Page links | automatic | To the PDF in the vault, its Zotero item, or the file on this computer; or a URL template with `{page}` and tokens (percent-encoded), e.g. `zotero://open-pdf/library/items/{{zoteroPdfKey}}?page={page}`; or plain page numbers. |
+
+A **template note** is Markdown with two kinds of placeholder:
+
+- **Pieces of the chapter**: `{{about}}`, `{{oneLine}}`, `{{newOrSurprising}}`, `{{objectives}}`, `{{intuition}}`,
+  `{{prerequisites}}`, `{{primers}}`, `{{notation}}`, `{{sections}}`, `{{workedExamples}}`, `{{summary}}`,
+  `{{takeaways}}`, `{{misconceptions}}`, `{{practice}}`, `{{furtherReading}}`, `{{references}}`, `{{warnings}}`.
+  A piece alone on its line brings its lines; after `> ` (inside a callout) each of its lines gets the same
+  prefix; an empty piece removes its line.
+- **Tokens**, as above, filled in the template's own text only, never inside a piece.
+
+`{{#name}} … {{/name}}` keeps what it encloses only when that piece or token is not empty, on lines of their own
+or within a line. The template's own frontmatter is not used: a note's properties come from the next section.
+
+```markdown
+# {{title}}
+
+{{#oneLine}}
+> [!abstract] In one line
+> {{oneLine}}
+
+{{/oneLine}}
+## Arc
+
+{{sections}}
+
+## Worked examples
+
+{{workedExamples}}
+
+## Practice
+
+{{practice}}
+```
+
+### Properties
+
+| Setting | Default | |
+|---|---|---|
+| Properties | paper2chapter's | The frontmatter shown above, or **my own**: rows of a name, a type and a value template. |
+
+A row's types are text, list, link, number, date and checkbox. A list row gives one item per author (or per line
+of its value); a link row wraps its value in `[[…]]`; a row whose value comes out empty is left out. Rows can be
+added, removed and reordered, and *Start from paper2chapter's rows* fills in the default ones to edit.
+
+### Settings profile
+
+- **Preview** (also the command *Preview the chapter note these settings write*): the note your settings write for
+  a sample chapter, rendered or as Markdown, with its path. No model is asked and nothing is written; it is made
+  by the same code that writes a real note.
+- **Export settings** copies them as JSON, without this computer's paths or the plugin's cache; **Import
+  settings** pastes them back, here or in another vault. **Reset the note settings** returns everything but the
+  backend and the model to the defaults.
+- Every folder, template and URL is checked as you type it, with the reason shown beside it.
 
 ## Troubleshooting
 
@@ -149,6 +244,9 @@ on every new file.
 | *Codex is not signed in (or its sign-in expired)* | `codex logout`, then `codex login`. |
 | *… usage limit was reached* | Your plan's limit; wait for it to reset, or pick a lighter model (Haiku, GPT-6 Luna). |
 | *… did not answer within 900 s* | Raise `CLI_TIMEOUT_S` in the backend's `.env`, or use a faster model or lower effort. |
+| *Zotero is not answering …* | Start Zotero, or check *Zotero address*. |
+| *Zotero's local API is off* | Zotero → Settings → Advanced → *Allow other applications on this computer to communicate with Zotero*. |
+| *The template note … does not exist* | Pick the template again under *Note format*; it must be a note in this vault. |
 | Port 8000 is taken | Change *Backend address* to another port, e.g. `http://127.0.0.1:8765`; the plugin starts the backend there. |
 
 The plugin is desktop-only: starting the backend and the subscription CLIs need a desktop.

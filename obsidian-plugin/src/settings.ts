@@ -1,34 +1,21 @@
-import { App, Notice, PluginSettingTab, type Setting, type SettingDefinitionItem } from 'obsidian';
+import { App, Modal, Notice, PluginSettingTab, Setting, type SettingDefinitionItem, TFile } from 'obsidian';
+import {
+	CHAPTER_ROWS, DEFAULT_SETTINGS, exportProfile, importProfile, lines, type P2CSettings, type PropertyRow, type PropertyType,
+} from './config.ts';
 import type Paper2ChapterPlugin from './main.ts';
-import type { PaperCacheEntry } from './run.ts';
+import { FRAGMENT_HELP } from './template.ts';
+import { TOKEN_HELP } from './tokens.ts';
 import type { AppSettings, Audience, Effort, Selection } from './types.ts';
+import {
+	checkFolders, checkFolderTemplate, checkNameTemplate, checkPageLinkTemplate, checkQuietHours, checkRows,
+	checkSectionHeading, checkTemplateText, checkUrl,
+} from './validate.ts';
 
-export interface P2CSettings {
-	backendUrl: string;
-	backendDir: string;
-	pythonPath: string;
-	autoStart: boolean;
-	outputFolder: string;
-	attachments: string;
-	solutions: boolean;
-	audience: Audience;
-	includePython: boolean;
-	openAfter: boolean;
-	papers: Record<string, PaperCacheEntry>;
-}
+export { DEFAULT_SETTINGS } from './config.ts';
+export type { P2CSettings } from './config.ts';
 
-export const DEFAULT_SETTINGS: P2CSettings = {
-	backendUrl: 'http://127.0.0.1:8000',
-	backendDir: '',
-	pythonPath: '',
-	autoStart: true,
-	outputFolder: 'Paper chapters',
-	attachments: 'attachments',
-	solutions: true,
-	audience: 'undergraduate',
-	includePython: true,
-	openAfter: true,
-	papers: {},
+const PROPERTY_TYPES: Record<PropertyType, string> = {
+	text: 'Text', list: 'List', link: 'Link', number: 'Number', date: 'Date', checkbox: 'Checkbox',
 };
 
 export const AUDIENCES: Record<Audience, string> = {
@@ -51,8 +38,22 @@ export function modelLabel(m: AppSettings['providers'][number]['models'][number]
 }
 
 /** Text settings stored trimmed; an empty value falls back to the default where one is required. */
-const TRIMMED = new Set(['backendUrl', 'backendDir', 'pythonPath', 'outputFolder', 'attachments']);
-const REQUIRED = new Set(['backendUrl', 'attachments']);
+const TRIMMED = new Set(['backendUrl', 'backendDir', 'pythonPath', 'outputFolder', 'attachments', 'noteName', 'figuresFolder',
+	'quietHours', 'templatePath', 'pageLinkTemplate', 'zoteroUrl', 'sectionHeading']);
+const REQUIRED = new Set(['backendUrl', 'attachments', 'noteName', 'zoteroUrl', 'sectionHeading']);
+const NUMBERS = new Set(['headingLevel']);
+
+/** A short explanation of every token, for the settings. */
+function helpList(el: HTMLElement, title: string, help: Record<string, string>): void {
+	const d = el.createEl('details', { cls: 'p2c-help' });
+	d.createEl('summary', { text: title });
+	const ul = d.createEl('ul');
+	for (const [k, v] of Object.entries(help)) {
+		const li = ul.createEl('li');
+		li.createEl('code', { text: `{{${k}}}` });
+		li.appendText(`: ${v}`);
+	}
+}
 
 /**
  * The settings tab, on Obsidian's declarative settings API (1.13+), so every setting is found by the settings
@@ -73,16 +74,32 @@ export class P2CSettingTab extends PluginSettingTab {
 	}
 
 	getControlValue(key: string): unknown {
-		return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+		const v = (this.plugin.settings as unknown as Record<string, unknown>)[key];
+		return NUMBERS.has(key) ? String(v) : v;
 	}
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		let v = value;
 		if (typeof v === 'string' && TRIMMED.has(key)) v = v.trim();
 		if (REQUIRED.has(key) && !v) v = (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[key];
+		if (NUMBERS.has(key)) v = Number(v);
 		(this.plugin.settings as unknown as Record<string, unknown>)[key] = v;
 		if (key === 'backendUrl') this.plugin.resetClient();
 		await this.plugin.saveSettings();
+		// rows that show or hide with this choice
+		if (['zotero', 'figures', 'layout', 'pageLinks', 'propertiesMode', 'paperNoteKeys'].includes(key)) this.update();
+	}
+
+	private get s(): P2CSettings {
+		return this.plugin.settings;
+	}
+
+	private async checkTemplatePath(path: string): Promise<string> {
+		if (this.s.layout !== 'template' && !path.trim()) return '';
+		if (!path.trim()) return 'Pick the note to use as the template.';
+		const f = this.app.vault?.getAbstractFileByPath?.(path.trim());
+		if (!(f instanceof TFile) || f.extension !== 'md') return 'There is no such note in this vault.';
+		return checkTemplateText(await this.app.vault.cachedRead(f));
 	}
 
 	hide(): void {
@@ -123,17 +140,230 @@ export class P2CSettingTab extends PluginSettingTab {
 			},
 			{
 				type: 'group',
+				heading: 'Sources',
+				items: [
+					{ name: 'PDFs in the vault', desc: "Offer the vault's PDFs in the paper picker. Right-clicking a PDF always works.", control: { type: 'toggle', key: 'vaultPdfs' } },
+					{
+						name: 'Folders outside the vault',
+						desc: 'Folders on this computer whose PDFs the picker offers, one per line. A PDF is read, never copied into the vault.',
+						aliases: ['literature', 'library', 'external'],
+						control: { type: 'textarea', key: 'pdfFolders', rows: 3, placeholder: 'C:\\Papers', validate: (v) => checkFolders(v) },
+					},
+					{
+						name: 'Zotero',
+						desc: "Pick papers from Zotero, which must be running with its local API on (Zotero: Settings → Advanced → Allow other applications on this computer to communicate with Zotero). Nothing in Zotero is changed.",
+						control: { type: 'toggle', key: 'zotero' },
+					},
+					{ name: 'Zotero address', visible: () => this.s.zotero, control: { type: 'text', key: 'zoteroUrl', placeholder: DEFAULT_SETTINGS.zoteroUrl, validate: (v) => checkUrl(v) } },
+					{ name: 'Check Zotero', searchable: false, visible: () => this.s.zotero, render: (setting) => this.renderZoteroCheck(setting) },
+					{
+						name: "Find the paper's own note",
+						desc: 'The properties of the note your vault keeps for a paper, one per line, tried in order: for example source, doi, arxiv, zotero, title; file.name is the note\'s own name. A match must name exactly one note. Empty: off.',
+						aliases: ['literature note', 'reference note', 'paper note'],
+						control: { type: 'textarea', key: 'paperNoteKeys', rows: 4, placeholder: 'doi\narxiv\ntitle' },
+					},
+					{
+						name: 'Look for it in these folders',
+						desc: 'One per line. Empty: the whole vault.',
+						visible: () => lines(this.s.paperNoteKeys).length > 0,
+						control: { type: 'textarea', key: 'paperNoteFolders', rows: 2 },
+					},
+				],
+			},
+			{
+				type: 'group',
 				heading: 'Chapters',
 				items: [
-					{ name: 'Folder', desc: 'Where chapter notes are created. Figures go into a subfolder.', control: { type: 'folder', key: 'outputFolder', placeholder: DEFAULT_SETTINGS.outputFolder, includeRoot: true } },
-					{ name: 'Figures subfolder', control: { type: 'text', key: 'attachments', placeholder: DEFAULT_SETTINGS.attachments } },
+					{
+						name: 'Folder',
+						desc: 'Where chapter notes are created. Tokens such as {{year}} or {{paperNoteFolder}} can be part of it.',
+						control: { type: 'folder', key: 'outputFolder', placeholder: DEFAULT_SETTINGS.outputFolder, includeRoot: true, validate: (v) => checkFolderTemplate(v) },
+					},
+					{ name: 'Note name', desc: 'A template: {{paperTitle}}, or {{firstAuthor}} {{year}} - {{paperTitle}}, for example.', control: { type: 'text', key: 'noteName', placeholder: DEFAULT_SETTINGS.noteName, validate: (v) => checkNameTemplate(v) } },
+					{ name: 'Tokens', searchable: false, render: (setting) => { setting.setName(''); helpList(setting.descEl, 'Tokens you can use', TOKEN_HELP); } },
+					{
+						name: 'Figures',
+						control: { type: 'dropdown', key: 'figures', options: { subfolder: 'In a subfolder beside the note', obsidian: "Where Obsidian puts attachments", folder: 'In a fixed folder' } },
+					},
+					{ name: 'Figures subfolder', visible: () => this.s.figures === 'subfolder', control: { type: 'text', key: 'attachments', placeholder: DEFAULT_SETTINGS.attachments } },
+					{ name: 'Figures folder', visible: () => this.s.figures === 'folder', control: { type: 'folder', key: 'figuresFolder', validate: (v) => (this.s.figures === 'folder' && !v.trim() ? 'Pick a folder.' : '') } },
+					{ name: 'When the name is taken', control: { type: 'dropdown', key: 'onExists', options: { number: 'Write a second note, numbered', skip: 'Write nothing' } } },
+					{
+						name: 'Quiet hours',
+						desc: 'No note is written between these times (for example 23:00-06:00, while other tools work in the vault); a chapter that finishes then waits. Empty: none.',
+						control: { type: 'text', key: 'quietHours', placeholder: '23:00-06:00', validate: (v) => checkQuietHours(v) },
+					},
 					{ name: 'Default audience', control: { type: 'dropdown', key: 'audience', options: AUDIENCES } },
 					{ name: 'Python exercises', desc: 'Include coding exercises; their reference solutions are run and checked by the backend.', control: { type: 'toggle', key: 'includePython' } },
 					{ name: 'Include solutions', desc: 'Solutions are folded under each exercise.', control: { type: 'toggle', key: 'solutions' } },
 					{ name: 'Open the note when it is ready', control: { type: 'toggle', key: 'openAfter' } },
 				],
 			},
+			{
+				type: 'group',
+				heading: 'Note format',
+				items: [
+					{
+						name: 'Layout',
+						desc: "paper2chapter's note as the backend writes it; a textbook layout; or your own template note.",
+						control: { type: 'dropdown', key: 'layout', options: { paper2chapter: 'paper2chapter', textbook: 'Textbook', template: 'My template note' } },
+					},
+					{
+						name: 'Template note',
+						desc: 'A note with placeholders for the pieces of the chapter, and tokens. Its own frontmatter is not used: set properties below.',
+						visible: () => this.s.layout === 'template',
+						control: { type: 'file', key: 'templatePath', filter: (f) => f.extension === 'md', validate: (v) => this.checkTemplatePath(v) },
+					},
+					{ name: 'Pieces', searchable: false, visible: () => this.s.layout === 'template', render: (setting) => { setting.setName(''); helpList(setting.descEl, 'Pieces a template can place', FRAGMENT_HELP); } },
+					{
+						name: 'Section heading',
+						desc: 'A template: {{n}} the number, {{title}}, {{page}} the first page it cites, {{pages}}; {{#page}} … {{/page}} only when there is one.',
+						visible: () => this.s.layout !== 'paper2chapter',
+						control: { type: 'text', key: 'sectionHeading', placeholder: DEFAULT_SETTINGS.sectionHeading, validate: (v) => checkSectionHeading(v) },
+					},
+					{ name: 'Section heading level', visible: () => this.s.layout !== 'paper2chapter', control: { type: 'dropdown', key: 'headingLevel', options: { 1: '#', 2: '##', 3: '###', 4: '####' } } },
+					{ name: 'Worked examples', visible: () => this.s.layout !== 'paper2chapter', control: { type: 'dropdown', key: 'examples', options: { inline: 'In their sections', gathered: 'Gathered in one place ({{workedExamples}})' } } },
+					{
+						name: 'Page links',
+						desc: 'Where (p. 4) leads: automatically to the PDF in the vault, its Zotero item, or the file on this computer; or a URL template; or nowhere.',
+						control: { type: 'dropdown', key: 'pageLinks', options: { auto: 'Automatic', custom: 'A URL template', plain: 'Plain page numbers' } },
+					},
+					{
+						name: 'Page link template',
+						desc: 'A URL with {page}, and tokens: zotero://open-pdf/library/items/{{zoteroPdfKey}}?page={page}, for example. Tokens are percent-encoded.',
+						visible: () => this.s.pageLinks === 'custom',
+						control: { type: 'text', key: 'pageLinkTemplate', validate: (v) => (!v.trim() && this.s.pageLinks !== 'custom' ? '' : checkPageLinkTemplate(v)) },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Properties',
+				items: [
+					{
+						name: 'Properties',
+						desc: "paper2chapter's own (title, paper, authors, source PDF, model, …), or your own rows below.",
+						control: { type: 'dropdown', key: 'propertiesMode', options: { chapter: "paper2chapter's", custom: 'My own' } },
+					},
+					{ name: 'Check the rows', searchable: false, visible: () => this.s.propertiesMode === 'custom', render: (setting) => this.renderRowsCheck(setting) },
+				],
+			},
+			{
+				type: 'list',
+				heading: 'Property rows',
+				visible: () => this.s.propertiesMode === 'custom',
+				emptyState: 'No property: the note has no frontmatter.',
+				items: this.s.propertyRows.map((row, i) => ({
+					name: row.key || `Property ${i + 1}`,
+					searchable: false,
+					render: (setting: Setting) => this.renderRow(setting, row),
+				})),
+				onDelete: (i) => { this.s.propertyRows.splice(i, 1); void this.plugin.saveSettings().then(() => this.update()); },
+				onReorder: (from, to) => {
+					const [r] = this.s.propertyRows.splice(from, 1);
+					if (r) this.s.propertyRows.splice(to, 0, r);
+					void this.plugin.saveSettings().then(() => this.update());
+				},
+				addItem: { name: 'Add a property', action: () => { this.s.propertyRows.push({ key: '', value: '', type: 'text' }); void this.plugin.saveSettings().then(() => this.update()); } },
+			},
+			{
+				type: 'group',
+				heading: 'Settings profile',
+				items: [
+					{ name: 'Preview', desc: 'See the note these settings write, from a sample chapter: no model is asked and nothing is written.', render: (setting) => this.renderPreview(setting) },
+					{ name: 'Export settings', desc: "Copy these settings as JSON, without this computer's paths, to keep them or use them in another vault.", render: (setting) => this.renderExport(setting) },
+					{ name: 'Import settings', desc: "Paste settings exported before. This computer's paths are kept.", render: (setting) => this.renderImport(setting) },
+					{ name: 'Reset the note settings', desc: 'Sources, chapters, format and properties back to their defaults. The backend and the model stay.', render: (setting) => this.renderReset(setting) },
+				],
+			},
 		];
+	}
+
+	// ------------------------------------------------------------------ sources, properties, profile rows
+
+	private renderZoteroCheck(setting: Setting): void {
+		setting.setName('').addButton((b) => b.setButtonText('Check Zotero').onClick(async () => {
+			try {
+				new Notice(await this.plugin.zotero().check(), 6000);
+			} catch (e) {
+				new Notice((e as Error).message, 10000);
+			}
+		}));
+	}
+
+	private renderRowsCheck(setting: Setting): void {
+		const problem = checkRows(this.s.propertyRows);
+		setting.setName('').setDesc(problem || 'Every row is fine.');
+		if (problem) setting.descEl.addClass('p2c-warn');
+		setting.addButton((b) => b.setButtonText("Start from paper2chapter's rows").onClick(async () => {
+			this.s.propertyRows = CHAPTER_ROWS.map((r) => ({ ...r }));
+			await this.plugin.saveSettings();
+			this.update();
+		}));
+	}
+
+	private renderRow(setting: Setting, row: PropertyRow): void {
+		setting.setName('');
+		setting.addText((t) => t.setPlaceholder('Property').setValue(row.key).onChange(async (v) => {
+			row.key = v.trim();
+			await this.plugin.saveSettings();
+		}));
+		setting.addDropdown((d) => {
+			for (const [k, label] of Object.entries(PROPERTY_TYPES)) d.addOption(k, label);
+			d.setValue(row.type).onChange(async (v) => {
+				row.type = v as PropertyType;
+				await this.plugin.saveSettings();
+			});
+		});
+		setting.addText((t) => t.setPlaceholder('Value, e.g. {{paperNote}}').setValue(row.value).onChange(async (v) => {
+			row.value = v;
+			await this.plugin.saveSettings();
+		}));
+	}
+
+	private renderPreview(setting: Setting): void {
+		setting.addButton((b) => b.setButtonText('Preview').setCta().onClick(() => this.plugin.openPreview()));
+	}
+
+	private renderExport(setting: Setting): void {
+		setting.addButton((b) => b.setButtonText('Copy').onClick(async () => {
+			try {
+				await navigator.clipboard.writeText(exportProfile(this.s));
+				new Notice('Settings copied.');
+			} catch (e) {
+				new Notice((e as Error).message, 8000);
+			}
+		}));
+	}
+
+	private renderImport(setting: Setting): void {
+		setting.addButton((b) => b.setButtonText('Paste…').onClick(() => {
+			new ImportModal(this.app, async (text) => {
+				this.plugin.settings = importProfile(text, this.s);
+				this.plugin.resetClient();
+				await this.plugin.saveSettings();
+				this.update();
+				new Notice('Settings imported.');
+			}).open();
+		}));
+	}
+
+	private renderReset(setting: Setting): void {
+		let armed = false;
+		setting.addButton((b) => b.setButtonText('Reset').setDestructive().onClick(async () => {
+			if (!armed) {
+				armed = true;
+				b.setButtonText('Click again to reset');
+				return;
+			}
+			const keep = ['backendUrl', 'backendDir', 'pythonPath', 'autoStart', 'papers'] as const;
+			const next: P2CSettings = { ...DEFAULT_SETTINGS, propertyRows: CHAPTER_ROWS.map((r) => ({ ...r })) };
+			for (const k of keep) (next as unknown as Record<string, unknown>)[k] = this.s[k];
+			this.plugin.settings = next;
+			await this.plugin.saveSettings();
+			this.update();
+			new Notice('Note settings reset.');
+		}));
 	}
 
 	// ------------------------------------------------------------------ backend rows
@@ -265,5 +495,36 @@ export class P2CSettingTab extends PluginSettingTab {
 				new Notice((e as Error).message, 8000);
 			}
 		}));
+	}
+}
+
+/** Paste a settings profile; it is checked before anything changes. */
+class ImportModal extends Modal {
+	private apply: (text: string) => Promise<void>;
+	constructor(app: App, apply: (text: string) => Promise<void>) {
+		super(app);
+		this.apply = apply;
+	}
+
+	onOpen(): void {
+		this.setTitle('Import settings');
+		let text = '';
+		const area = this.contentEl.createEl('textarea', { cls: 'p2c-import', attr: { rows: '12', placeholder: 'Paste the settings here' } });
+		area.addEventListener('input', () => { text = area.value; });
+		const error = this.contentEl.createDiv({ cls: 'p2c-error' });
+		new Setting(this.contentEl)
+			.addButton((b) => b.setButtonText('Import').setCta().onClick(async () => {
+				try {
+					await this.apply(text);
+					this.close();
+				} catch (e) {
+					error.setText((e as Error).message);
+				}
+			}))
+			.addButton((b) => b.setButtonText('Cancel').onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }

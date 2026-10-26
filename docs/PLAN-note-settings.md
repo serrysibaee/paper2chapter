@@ -37,16 +37,25 @@ setting**, so the plugin fits a vault instead of a vault fitting the plugin, and
 
 ### S2. Plugin: sources, output, format, properties
 
-- [ ] Sources: PDFs in the vault (as now), folders outside the vault (desktop), Zotero through its local API; the
-      paper's own note found by properties (PDF path, Zotero key, DOI, arXiv id, title).
-- [ ] Output: folder and note-name templates, where figures go (including Obsidian's attachment setting), what to
+- [x] Sources: PDFs in the vault (as now), folders outside the vault (desktop), Zotero through its local API (read
+      in Zotero 10's `server_localAPI.js`: items, children, `…/file/view/url`); the paper's own note found by
+      properties (PDF path, Zotero key, DOI, arXiv id, title, the note's own name), exactly one or none.
+- [x] Output: folder and note-name templates, where figures go (including Obsidian's attachment setting), what to
       do when a name is taken, quiet hours.
-- [ ] Format: layouts (today's note; a textbook layout), a template note with placeholders, page-link styles,
+- [x] Format: layouts (today's note; a textbook layout), a template note with placeholders, page-link styles,
       heading level and numbering, worked examples inline or gathered.
-- [ ] Properties: rows of key, value template and type, written with `processFrontMatter`; tokens.
-- [ ] Preview with a bundled sample chapter (no model call, no write), validation as typed, settings export and
+- [x] Properties: rows of key, value template and type; tokens. Written as YAML in the note itself, every string
+      double-quoted, rather than with `processFrontMatter` after the note exists: one write, and testable in Node
+      (N7).
+- [x] Preview with a bundled sample chapter (no model call, no write), validation as typed, settings export and
       import, migration from 0.1.1's settings.
-- [ ] Tests: the defaults' snapshot; fixture vaults end to end on the mock provider.
+- [x] Tests: the defaults' snapshot (the 0.1.1 note and path, byte for byte); each layout, properties, templates,
+      page links, quiet hours, name clashes and figure modes on a scripted backend; the Textbook layout end to end
+      on the real backend (mock provider).
+
+N7: the preview and the writer share one code path. The preview runs the real `ChapterRun.write` against the
+bundled sample (`src/sample.ts`, made by `backend/scripts/plugin_sample.py` from the backend's test fixture) and a
+vault in memory, so what it shows is what a chapter gets.
 
 ### S3. Plugin: reader profile, integrations, chapter manifest
 
@@ -69,3 +78,4 @@ setting**, so the plugin fits a vault instead of a vault fitting the plugin, and
 | 2026-10-26 | Backend before S1 | 112 passed, 1 skipped |
 | 2026-10-26 | Backend after S1 | 139 passed, 1 skipped (4 snapshot tests, 23 parts tests) |
 | 2026-10-26 | Plugin on the S1 backend | 26 passed, the end-to-end test included |
+| 2026-10-26 | Plugin after S2 | 67 passed (41 new), the end-to-end test included; lint 0 errors 0 warnings; tsc clean; main.js 86 KB (the sample chapter is 21 KB of it) |

@@ -70,3 +70,14 @@ export class Notice {
 export const Platform = { isDesktopApp: false, isWin: false, isMacOS: false };
 export const normalizePath = (p: string) => p;
 export const requestUrl = async () => { throw new Error('no network in tests'); };
+export class SuggestModal<T> extends Modal {
+	setPlaceholder(_t: string) {}
+	onNoSuggestion() {}
+	declare _t?: T;
+}
+export class Component {
+	load() {}
+	unload() {}
+}
+export const MarkdownRenderer = { render: async () => {} };
+export const moment = () => ({ format: (f: string) => f });
