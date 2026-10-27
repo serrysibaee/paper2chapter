@@ -198,11 +198,13 @@ giving today's reason).
 **Tokens** fill folder, name, heading, page-link and property templates: `{{title}}` (the chapter's),
 `{{paperTitle}}`, `{{authors}}`, `{{firstAuthor}}`, `{{year}}`, `{{field}}`, `{{doi}}`, `{{arxiv}}`,
 `{{zoteroKey}}`, `{{zoteroPdfKey}}`, `{{pdf}}`, `{{pdfLink}}`, `{{paperNote}}`, `{{paperNoteFolder}}`,
-`{{paperSlug}}`, `{{paperId}}`, `{{provider}}`, `{{model}}`, `{{audience}}`, `{{generated}}`, the concept tokens
+`{{paperSlug}}`, `{{paperId}}`, `{{provider}}`, `{{model}}`, `{{audience}}`, `{{generated}}`, `{{pages}}` (the
+paper's pages, `1–12` from its page count) and `{{pageCount}}`, the concept tokens
 `{{concepts}}`, `{{primedConcepts}}`, `{{assumedConcepts}}` and `{{knownConcepts}}` (above), and
 `{{date:FORMAT}}` (a [moment.js format](https://momentjs.com/docs/#/displaying/format/), e.g.
 `{{date:YYYY-MM-DD}}`). A token the paper has no value for is empty; a name that is no token is left as you
-typed it, and the settings point it out.
+typed it, and the settings point it out. **`{{a|b}}`** is the first of its tokens that has a value:
+`{{paperNote|paperTitle}} - Chapter` names the note after the paper's own note, else after its title.
 
 ### Note format
 
@@ -210,7 +212,7 @@ typed it, and the settings point it out.
 |---|---|---|
 | Layout | paper2chapter | **paper2chapter**: the note as the backend writes it (above). **Textbook**: the one-line summary, what the paper adds, objectives, intuition, *What it assumes* (the prerequisites, then their primers), notation, the sections, summary, practice, references. **My template note**: your own. |
 | Template note | | A note with placeholders for the chapter's pieces and with tokens (below). |
-| Section heading | `{{n}}. {{title}}` | With `{{page}}` (the first page the section cites) and `{{pages}}`, e.g. `1.{{n}} {{title}}{{#page}} — p. {{page}}{{/page}}`. |
+| Section heading | `{{n}}. {{title}}` | With `{{page}}` (the first page the section cites) and `{{pages}}` (here, the pages the section cites), e.g. `1.{{n}} {{title}}{{#page}} — p. {{page}}{{/page}}`. |
 | Section heading level | `##` | Derivations, primers and *Check your understanding* sit one level below. |
 | Worked examples | in their sections | Or gathered in one place, where the template puts `{{workedExamples}}`. |
 | Page links | automatic | To the PDF in the vault, its Zotero item, or the file on this computer; or a URL template with `{page}` and tokens (percent-encoded), e.g. `zotero://open-pdf/library/items/{{zoteroPdfKey}}?page={page}`; or plain page numbers. |
@@ -227,7 +229,10 @@ A **template note** is Markdown with two kinds of placeholder:
 - **Tokens**, as above, filled in the template's own text only, never inside a piece.
 
 `{{#name}} … {{/name}}` keeps what it encloses only when that piece or token is not empty, on lines of their own
-or within a line. The template's own frontmatter is not used: a note's properties come from the next section.
+or within a line. Over a token that holds a list (`{{authors}}` and the four concept tokens), a section whose text
+uses **`{{.}}`** is written once per value, `{{.}}` being the value: one linked line per concept, or
+`{{#authors}}{{.}}; {{/authors}}` within a line. A value is written as it is, never filled as a template. The
+template's own frontmatter is not used: a note's properties come from the next section.
 
 ```markdown
 # {{title}}
@@ -244,6 +249,12 @@ or within a line. The template's own frontmatter is not used: a note's propertie
 ## Worked examples
 
 {{workedExamples}}
+
+## Concepts it teaches
+
+{{#concepts}}
+- [[{{.}}]]
+{{/concepts}}
 
 ## Practice
 

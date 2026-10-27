@@ -5,13 +5,13 @@ import { Paper2ChapterClient } from '../src/api.ts';
 import { DEFAULT_SETTINGS, type P2CSettings } from '../src/config.ts';
 import { ChapterRun, type NoteEnv, type PdfSource } from '../src/run.ts';
 import { SAMPLE } from '../src/sample.ts';
-import type { PaperAnalysis } from '../src/types.ts';
+import type { ChapterParts, PaperAnalysis } from '../src/types.ts';
 import { MemoryVault, noSleep, response, scripted } from './helpers.ts';
 
 const ANALYSIS: PaperAnalysis = { title: 'Softmax Weighting for Robust Averaging', authors: ['Jane Doe', 'John Roe'], year: '2020', field: 'ML',
 	one_sentence_summary: 's', difficulty: 'intermediate', prerequisites: [] };
 
-function backend() {
+function backend(pageCount: number | null = null) {
 	const exports: URLSearchParams[] = [];
 	const http = scripted([(_r, u) => {
 		const m = u.pathname.match(/^\/api\/papers\/p1(\/.*)$/);
@@ -25,7 +25,9 @@ function backend() {
 		}
 		if (rest === '/export.parts') {
 			exports.push(u.searchParams);
-			return response(200, JSON.parse(JSON.stringify(SAMPLE.parts).replaceAll('![[F1.png]]', `![[${prefix}F1.png]]`)));
+			const parts = JSON.parse(JSON.stringify(SAMPLE.parts).replaceAll('![[F1.png]]', `![[${prefix}F1.png]]`)) as ChapterParts;
+			if (pageCount !== null) parts.paper.page_count = pageCount;
+			return response(200, parts);
 		}
 		if (rest.startsWith('/assets/')) return response(200, 'PNG');
 		return undefined;
@@ -35,8 +37,8 @@ function backend() {
 
 const vaultPdf: PdfSource = { path: 'Papers/sample.pdf', name: 'sample.pdf', stamp: 's', read: async () => new ArrayBuffer(1) };
 
-function setup(pdf: PdfSource = vaultPdf, envOver: Partial<NoteEnv> = {}) {
-	const be = backend();
+function setup(pdf: PdfSource = vaultPdf, envOver: Partial<NoteEnv> = {}, pageCount: number | null = null) {
+	const be = backend(pageCount);
 	const vault = new MemoryVault();
 	const waits: number[] = [];
 	const env: NoteEnv = {
@@ -97,6 +99,22 @@ test('folder and note-name templates, with the paper\'s own note', async () => {
 	const t = setup(vaultPdf, { paperNote: () => ({ linktext: 'Softmax card', folder: 'Reading/Papers' }) });
 	const res = await t.write({ paperNoteKeys: 'source', outputFolder: '{{paperNoteFolder}}/chapters/{{year}}', noteName: '{{paperNote}} - Chapter' });
 	assert.equal(res.notePath, 'Reading/Papers/chapters/2020/Softmax card - Chapter.md');
+});
+
+test('pages from the paper\'s page count; a fallback name and title when the paper has no note', async () => {
+	const t = setup(vaultPdf, {}, 14);
+	const res = await t.write({ paperNoteKeys: 'source', noteName: '{{paperNote|paperTitle}} - Chapter', propertiesMode: 'custom',
+		propertyRows: [
+			{ key: 'up', value: '{{paperNote}}', type: 'link' },
+			{ key: 'pages', value: '{{pages}}', type: 'text' },
+			{ key: 'title', value: '{{paperNote|paperTitle}} - Chapter', type: 'text' },
+		] });
+	assert.equal(res.notePath, 'Paper chapters/Softmax Weighting for Robust Averaging - Chapter.md');
+	assert.ok(t.vault.text(res.notePath).startsWith('---\npages: "1–14"\ntitle: "Softmax Weighting for Robust Averaging - Chapter"\n---\n'),
+		'no up: the paper has no note of its own');
+	const named = setup(vaultPdf, { paperNote: () => ({ linktext: 'Softmax card', folder: 'Reading/Papers' }) }, 14);
+	const res2 = await named.write({ paperNoteKeys: 'source', noteName: '{{paperNote|paperTitle}} - Chapter' });
+	assert.equal(res2.notePath, 'Paper chapters/Softmax card - Chapter.md');
 });
 
 test('a template note: its pieces, tokens and properties', async () => {

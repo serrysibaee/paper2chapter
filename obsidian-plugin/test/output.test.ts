@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { quietDelay, resolveFolder, resolveName } from '../src/output.ts';
-import { buildTokens, familyName, fill, slug, unknownTokens } from '../src/tokens.ts';
+import { buildTokens, familyName, fill, slug, tokenNames, unknownTokens } from '../src/tokens.ts';
 import {
 	checkFolders, checkFolderTemplate, checkNameTemplate, checkPageLinkTemplate, checkQuietHours, checkRows, checkSectionHeading,
 	checkTemplateText, checkUrl, usablePageLink,
@@ -28,6 +28,29 @@ test('folders and names from their templates, made safe', () => {
 	assert.equal(resolveName('{{paperTitle}}', t, fd, 'x'), 'Diffusion Policy Visuomotor Learning');
 	assert.equal(resolveName('{{paperNote}} - Chapter', t, fd, 'x'), 'Diffusion policy - Chapter');
 	assert.equal(resolveName('{{doi}}', t, fd, 'From the PDF'), 'From the PDF');
+});
+
+test('a fallback fills the first of its tokens that has a value', () => {
+	const noNote = buildTokens({ paperTitle: 'Diffusion Policy: Visuomotor Learning', authors: ['Cheng Chi'], doi: '' });
+	assert.equal(fill('{{paperNote|paperTitle}} - Chapter', t, fd), 'Diffusion policy - Chapter');
+	assert.equal(fill('{{paperNote|paperTitle}} - Chapter', noNote, fd), 'Diffusion Policy: Visuomotor Learning - Chapter');
+	assert.equal(fill('{{doi|arxiv}}x', noNote, fd), 'x');
+	assert.equal(fill('{{doi|authors}}', t, fd), 'Cheng Chi, Ben Burchfiel');
+	assert.equal(fill('{{nope|year}}', t, fd), '2023', 'a name that is no token is passed over');
+	assert.deepEqual(unknownTokens('{{paperNote|nope}} {{a|b}}'), ['nope', 'a', 'b']);
+	assert.equal(resolveName('{{paperNote|paperTitle}} - Chapter', noNote, fd, 'x'), 'Diffusion Policy Visuomotor Learning - Chapter');
+	assert.equal(checkNameTemplate('{{paperNote|paperTitle}} - Chapter'), '');
+	assert.match(checkNameTemplate('{{paperNote|papr}}'), /papr/);
+	assert.deepEqual(tokenNames('{{a|b}} {{#c}}{{/c}} {{date:YYYY}} {{.}} {{d}}'), ['a', 'b', 'c', 'date', 'd']);
+});
+
+test('pages: 1–N from the page count, and the count; empty when unknown', () => {
+	const withCount = buildTokens({ paperTitle: 'P', pageCount: 12 });
+	assert.equal(withCount.pages, '1–12');
+	assert.equal(withCount.pageCount, '12');
+	assert.equal(fill('{{pages}} / {{pageCount}}', buildTokens({ paperTitle: 'P' }), fd), ' / ');
+	assert.equal(buildTokens({ paperTitle: 'P', pageCount: 1 }).pages, '1');
+	assert.equal(checkNameTemplate('{{paperTitle}} ({{pageCount}} pages)'), '');
 });
 
 test('quiet hours: inside them a note waits until they end, across midnight too', () => {
