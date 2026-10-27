@@ -1,6 +1,6 @@
 # Changelog
 
-## Obsidian plugin 0.4.0 (unreleased)
+## Obsidian plugin 0.4.0 (2026-10-27)
 
 Three things a template could not say ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S4). Nothing a
 0.3.0 template writes changes, and the defaults still write the 0.1.1 note.
