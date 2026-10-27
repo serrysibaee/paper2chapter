@@ -77,6 +77,8 @@ vault in memory, so what it shows is what a chapter gets.
       with its match and whether it was known and why, the primers, the concepts, the exercises.
 - [x] Batch: a queue of papers, one at a time, kept across restarts (N11).
 - [x] `docs/OBSIDIAN.md` documents every setting.
+- [x] Tag `0.3.0` (go-ahead given 2026-10-27): https://github.com/serrysibaee/paper2chapter/releases/tag/0.3.0,
+      marked Latest; `main.js`, `manifest.json` and `styles.css` byte-identical to a local build.
 
 ## Results log
 
@@ -93,3 +95,4 @@ vault in memory, so what it shows is what a chapter gets.
 | 2026-10-27 | Plugin after S3 | 112 passed (69 before), the end-to-end test writing concepts, both blocks, flashcards and a manifest through the real backend; lint 0 errors 0 warnings; tsc clean. Not yet checked in a running Obsidian |
 | 2026-10-27 | Live in Obsidian 1.15.0 (scratch vault, 0.2.0's saved settings; Note Relatives and Dataview enabled, Knowledge OS 1.0.0 installed and off, Templater and Spaced Repetition absent) | settings migrated to version 3; the one-time notice named only the two absent plugins; the new groups and their checks (rules, property names, command ids, a bad value not saved); each integration row's state, *Get it* opening Templater's community page, Note Relatives' missing-row warning and *Open its settings*; the preview with both concept properties and the nav block; the review window on the real paper (one match ticked by Dataview, two candidates, no match, *Another note…*, *What does it teach?* add and remove) with no model call; an import writing both properties, the nav block, flashcards and a 23-exercise manifest, the command after writing run; the batch skipping a paper whose note is there, and writing the backend's chapter (not generating) when it is not |
 | 2026-10-27 | Found live, fixed | a ready row said "X is on" beside its own switch, off (now "installed and enabled"); a note the reader picks was not judged as a match is (now `repick`: ticked with its reason unless the reader set the tick); a multiple-choice card repeated its answer, and a coding card lacked its solution; an imported chapter (and the batch writing one the backend had) gave today's reasons for the ticks it was generated with (now `known_by: generation`). Plugin 117 passed |
+| 2026-10-27 | Release 0.3.0 | pull request 3 merged by rebase; tag `0.3.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |
