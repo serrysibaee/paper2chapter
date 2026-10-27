@@ -58,6 +58,26 @@ test('Zotero: search, the PDF attachment, and its file, through the local API', 
 	assert.equal(await z.filePath('PDF00001', 'win32'), 'C:/Users/me/Zotero/storage/PDF00001/Chi et al. - 2023.pdf');
 });
 
+test('Zotero collections, with their parents, and a collection\'s items page by page (for the batch)', async () => {
+	const many = Array.from({ length: 100 }, (_, i) => ({ key: `I${String(i).padStart(7, '0')}`, data: { itemType: 'journalArticle', title: `Paper ${i}` } }));
+	const http = scripted([
+		(_r, u) => (u.pathname === '/api/users/0/collections' ? response(200, [
+			{ key: 'COLL0001', data: { name: 'Robotics', parentCollection: false } },
+			{ key: 'COLL0002', data: { name: 'VLA', parentCollection: 'COLL0001' } },
+		]) : undefined),
+		(_r, u) => (u.pathname === '/api/users/0/collections/COLL0002/items/top'
+			? response(200, u.searchParams.get('start') === '100'
+				? [{ key: 'LAST0001', data: { itemType: 'preprint', title: 'Last' } }, { key: 'N0000001', data: { itemType: 'note' } }]
+				: many)
+			: undefined),
+	]);
+	const z = new ZoteroClient('http://x', http);
+	assert.deepEqual(await z.collections(), [{ key: 'COLL0001', name: 'Robotics' }, { key: 'COLL0002', name: 'Robotics / VLA' }]);
+	const items = await z.collectionItems('COLL0002');
+	assert.equal(items.length, 101);
+	assert.equal(items.at(-1)!.title, 'Last');
+});
+
 test('Zotero errors say what to do', async () => {
 	const off = new ZoteroClient('http://x', scripted([() => response(403, 'Local API is not enabled')]));
 	await assert.rejects(off.check(), (e: Error) => e instanceof SourceError && /Allow other applications/.test(e.message));

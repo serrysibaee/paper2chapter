@@ -5,7 +5,7 @@
  */
 import type { Audience } from './types.ts';
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 export type Layout = 'paper2chapter' | 'textbook' | 'template';
 export type PageLinks = 'auto' | 'custom' | 'plain';
@@ -13,7 +13,23 @@ export type FiguresMode = 'subfolder' | 'obsidian' | 'folder';
 export type OnExists = 'number' | 'skip';
 export type PropertiesMode = 'chapter' | 'custom';
 export type ExamplesMode = 'inline' | 'gathered';
-export type PropertyType = 'text' | 'list' | 'link' | 'number' | 'date' | 'checkbox';
+export type PropertyType = 'text' | 'list' | 'link' | 'links' | 'number' | 'date' | 'checkbox';
+export type FlashcardsMode = 'none' | 'spaced-repetition' | 'custom';
+export type QueueStatus = 'waiting' | 'running' | 'done' | 'skipped' | 'failed';
+
+/** A paper in the batch: enough to find its PDF again after a restart. */
+export interface QueueItem {
+	key: string; // the vault path, the path on this computer, or zotero:<item key>
+	name: string;
+	kind: 'vault' | 'file' | 'zotero';
+	absPath?: string;
+	zotero?: { itemKey: string };
+	meta?: PaperCacheEntry['meta']; // what Zotero knows of the paper
+	status: QueueStatus;
+	message?: string;
+	note?: string; // the chapter note it wrote, or found already there
+	added: string; // ISO date
+}
 
 export interface PropertyRow {
 	key: string;
@@ -69,8 +85,31 @@ export interface P2CSettings {
 	// properties
 	propertiesMode: PropertiesMode;
 	propertyRows: PropertyRow[];
-	// state, not settings: PDFs already sent to the backend
+	// prerequisites and concepts
+	matchConcepts: boolean;
+	conceptFolders: string; // one per line; empty: the whole vault
+	conceptFilter: string; // rules, one per line, all of which a concept note holds
+	knownRules: string; // rules, one per line, any of which marks a concept note as known
+	teachesKey: string;
+	prerequisitesKey: string;
+	// integrations
+	knowledgeOs: boolean;
+	noteRelatives: boolean;
+	dataview: boolean;
+	dataviewSource: string;
+	templater: boolean;
+	flashcards: FlashcardsMode;
+	flashcardTag: string;
+	flashcardTemplate: string; // custom: {{question}}, {{answer}}, {{kind}}, {{difficulty}}
+	afterCommands: string; // command ids, one per line
+	// learning outputs
+	manifest: boolean;
+	manifestPath: string; // a template
+	// state, not settings: PDFs already sent to the backend, the batch, and the one-time notice
 	papers: Record<string, PaperCacheEntry>;
+	queue: QueueItem[];
+	queuePaused: boolean;
+	introShown: boolean;
 }
 
 /** The 0.1.1 note's frontmatter, as rows: what "Properties: custom" starts from. */
@@ -119,8 +158,36 @@ export const DEFAULT_SETTINGS: P2CSettings = {
 	examples: 'inline',
 	propertiesMode: 'chapter',
 	propertyRows: CHAPTER_ROWS.map((r) => ({ ...r })),
+	matchConcepts: false,
+	conceptFolders: '',
+	conceptFilter: '',
+	knownRules: '',
+	teachesKey: 'teaches',
+	prerequisitesKey: 'prerequisites',
+	knowledgeOs: false,
+	noteRelatives: false,
+	dataview: false,
+	dataviewSource: '',
+	templater: false,
+	flashcards: 'none',
+	flashcardTag: 'flashcards',
+	flashcardTemplate: '{{question}}\n?\n{{answer}}',
+	afterCommands: '',
+	manifest: false,
+	manifestPath: 'Paper chapters/manifests/{{paperSlug}}.json',
 	papers: {},
+	queue: [],
+	queuePaused: false,
+	introShown: false,
 };
+
+/** The two concept properties a chapter gains when concepts are matched: what it teaches, and what it assumes. */
+export function conceptRows(s: P2CSettings): PropertyRow[] {
+	return [
+		{ key: s.teachesKey, value: '{{concepts}}', type: 'links' },
+		{ key: s.prerequisitesKey, value: '{{assumedConcepts}}', type: 'links' },
+	];
+}
 
 const CHOICES: Partial<Record<keyof P2CSettings, readonly string[]>> = {
 	audience: ['high-school', 'undergraduate', 'graduate', 'practitioner'],
@@ -130,11 +197,29 @@ const CHOICES: Partial<Record<keyof P2CSettings, readonly string[]>> = {
 	pageLinks: ['auto', 'custom', 'plain'],
 	examples: ['inline', 'gathered'],
 	propertiesMode: ['chapter', 'custom'],
+	flashcards: ['none', 'spaced-repetition', 'custom'],
 };
-const PROPERTY_TYPES: readonly string[] = ['text', 'list', 'link', 'number', 'date', 'checkbox'];
+const PROPERTY_TYPES: readonly string[] = ['text', 'list', 'link', 'links', 'number', 'date', 'checkbox'];
+const QUEUE_STATUS: readonly string[] = ['waiting', 'running', 'done', 'skipped', 'failed'];
 
 function fresh(): P2CSettings {
-	return { ...DEFAULT_SETTINGS, propertyRows: DEFAULT_SETTINGS.propertyRows.map((r) => ({ ...r })), papers: {} };
+	return { ...DEFAULT_SETTINGS, propertyRows: DEFAULT_SETTINGS.propertyRows.map((r) => ({ ...r })), papers: {}, queue: [] };
+}
+
+/** The saved batch: items it cannot read are dropped, and a paper that was running when Obsidian closed waits again. */
+function cleanQueue(v: unknown): QueueItem[] | null {
+	if (!Array.isArray(v)) return null;
+	const out: QueueItem[] = [];
+	for (const x of v as unknown[]) {
+		if (!x || typeof x !== 'object') continue;
+		const o = x as Record<string, unknown>;
+		if (typeof o.key !== 'string' || typeof o.name !== 'string' || !QUEUE_STATUS.includes(o.status as string)) continue;
+		if (!['vault', 'file', 'zotero'].includes(o.kind as string)) continue;
+		const item = { ...o } as unknown as QueueItem;
+		if (item.status === 'running') item.status = 'waiting';
+		out.push(item);
+	}
+	return out;
 }
 
 function cleanRows(v: unknown): PropertyRow[] | null {
@@ -166,6 +251,9 @@ export function migrate(saved: unknown): P2CSettings {
 			if (rows) out.propertyRows = rows;
 		} else if (key === 'papers') {
 			if (v && typeof v === 'object' && !Array.isArray(v)) out.papers = v as Record<string, PaperCacheEntry>;
+		} else if (key === 'queue') {
+			const q = cleanQueue(v);
+			if (q) out.queue = q;
 		} else if (typeof v === typeof DEFAULT_SETTINGS[key]) {
 			const allowed = CHOICES[key];
 			if (!allowed || allowed.includes(v as string)) o[key] = v;
@@ -176,8 +264,8 @@ export function migrate(saved: unknown): P2CSettings {
 	return out;
 }
 
-/** Keys a profile leaves out: this computer's paths, and the cache of PDFs already sent. */
-const MACHINE_KEYS: (keyof P2CSettings)[] = ['backendDir', 'pythonPath', 'papers'];
+/** Keys a profile leaves out: this computer's paths, the cache of PDFs already sent, and this vault's batch. */
+export const MACHINE_KEYS: (keyof P2CSettings)[] = ['backendDir', 'pythonPath', 'papers', 'queue', 'queuePaused', 'introShown'];
 export const PROFILE_MARK = 'paper2chapter-settings';
 
 export function exportProfile(s: P2CSettings): string {
@@ -209,7 +297,12 @@ export function lines(text: string): string[] {
 	return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 }
 
-/** Do these settings write exactly the 0.1.1 note (the backend's export.md, unchanged)? */
+/**
+ * Do these settings write exactly the 0.1.1 note (the backend's export.md, unchanged)? Matching concepts adds two
+ * properties, the two integrations add their blocks and flashcards a section; a manifest, commands after writing,
+ * Dataview and Templater leave the note as it is.
+ */
 export function isClassicNote(s: P2CSettings): boolean {
-	return s.layout === 'paper2chapter' && s.propertiesMode === 'chapter';
+	return s.layout === 'paper2chapter' && s.propertiesMode === 'chapter' && !s.matchConcepts && !s.noteRelatives
+		&& !s.knowledgeOs && s.flashcards === 'none';
 }

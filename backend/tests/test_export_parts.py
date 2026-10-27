@@ -119,12 +119,40 @@ def test_without_an_analysis_the_primers_still_name_the_prerequisites(chapter):
         ("weighted-averages", False, True), ("vectors-dot-products", False, True), ("exponential-function", True, False)]
 
 
+def test_exercises_as_data(chapter, analysis):
+    """Every exercise once, in the note's order, with its fields apart: what flashcards and a manifest need."""
+    p = render_chapter_parts(chapter, analysis=analysis, **OPTS)
+    assert [(e.id, e.where, e.section, e.prerequisite_id) for e in p.exercises] == [
+        ("primer1", "primer", None, "weighted-averages"), ("primer2", "primer", None, "vectors-dot-products"),
+        ("s1-q1", "section", 1, None), ("s2-q1", "section", 2, None),
+        ("p1", "practice", None, None), ("p2", "practice", None, None), ("p3", "practice", None, None)]
+    ex = {e.id: e for e in p.exercises}
+    src = chapter.practice[0]
+    assert (ex["p1"].kind, ex["p1"].difficulty, ex["p1"].prompt, ex["p1"].answer, ex["p1"].explanation) == (
+        "conceptual", "easy", src.prompt_md, src.answer_md, src.explanation_md)
+    mc = chapter.sections[0].check_questions[0]
+    assert ex["s1-q1"].choices == mc.choices and ex["s1-q1"].correct_choice == mc.correct_choice
+    assert ex["p1"].check is None and ex["p2"].check == "verified"
+    assert ex["p3"].kind == "python" and ex["p3"].solution_code and ex["p1"].solution_code is None
+    for e in p.exercises:
+        assert quoted(e.prompt) in GOLD, e.id  # the same text the note shows, inside its callout
+
+
+def test_exercises_keep_their_answers_without_solutions(chapter, analysis):
+    p = render_chapter_parts(chapter, analysis=analysis, **{**OPTS, "include_solutions": False})
+    assert "[!success]- Solution" not in "\n".join(p.practice)
+    assert len(p.exercises) == 7 and all(e.answer for e in p.exercises)
+
+
 def test_every_fragment_is_inert(chapter, analysis):
     evil = ("Look <script>x</script> <% tp.file.create_new() %> `= this.file.name` `$= dv.current()`\n"
             "```dataviewjs\napp.vault.delete()\n```\n")
     ch = chapter.model_copy(deep=True)
     ch.intuition_md = ch.summary_md = ch.sections[0].body_md = ch.sections[0].intuition_md = evil
     ch.primers[0].explanation_md = ch.practice[0].prompt_md = ch.practice[0].explanation_md = evil
+    ch.practice[0].answer_md = ch.sections[0].check_questions[0].prompt_md = evil
+    ch.sections[0].check_questions[0].choices = [evil, "fine"]
+    ch.practice[2].solution_code = "x = '<% tp.file.title %>'\n```\nnot a fence\n```"
     ch.sections[0].title = ch.primers[0].title = ch.learning_objectives[0] = "T <% x %> <b>"
     ch.key_takeaways = ch.common_misconceptions = ch.warnings = [evil]
     a = analysis.model_copy(deep=True)

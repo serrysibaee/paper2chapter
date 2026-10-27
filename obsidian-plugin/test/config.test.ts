@@ -61,6 +61,43 @@ test('a file that is not a profile is refused', () => {
 	assert.throws(() => importProfile('{"layout":"textbook"}', DEFAULT_SETTINGS), /not a paper2chapter settings profile/);
 });
 
+test('settings saved by 0.2.0 gain the reader, integration and batch settings, all off', () => {
+	const s = migrate({ settingsVersion: 2, layout: 'textbook', noteName: '{{paperTitle}}' });
+	assert.equal(s.settingsVersion, SETTINGS_VERSION);
+	assert.equal(s.layout, 'textbook');
+	for (const k of ['matchConcepts', 'knowledgeOs', 'noteRelatives', 'dataview', 'templater', 'manifest'] as const) assert.equal(s[k], false, k);
+	assert.equal(s.flashcards, 'none');
+	assert.equal(s.teachesKey, 'teaches');
+	assert.equal(s.prerequisitesKey, 'prerequisites', 'never requires, the name a learning road may give its own edges');
+	assert.deepEqual(s.queue, []);
+	assert.ok(isClassicNote(migrate({ settingsVersion: 2 })));
+});
+
+test('each option that changes the note leaves the 0.1.1 note: matching, the two blocks, flashcards', () => {
+	for (const over of [{ matchConcepts: true }, { noteRelatives: true }, { knowledgeOs: true }, { flashcards: 'spaced-repetition' as const }]) {
+		assert.equal(isClassicNote({ ...DEFAULT_SETTINGS, ...over }), false, JSON.stringify(over));
+	}
+	for (const over of [{ manifest: true }, { afterCommands: 'editor:save-file' }, { dataview: true }, { templater: true }]) {
+		assert.equal(isClassicNote({ ...DEFAULT_SETTINGS, ...over }), true, `${JSON.stringify(over)} leaves the note as it is`);
+	}
+});
+
+test('the batch is kept, a paper that was running waits again, and a profile leaves the batch out', () => {
+	const item = (status: string) => ({ key: `k-${status}`, name: 'a.pdf', kind: 'vault', status, added: '2026-10-27' });
+	const s = migrate({ queue: [item('waiting'), item('running'), item('done'), { junk: 1 }, item('bogus')], queuePaused: true, introShown: true });
+	assert.deepEqual(s.queue.map((q) => q.status), ['waiting', 'waiting', 'done']);
+	assert.equal(s.queuePaused, true);
+	const text = exportProfile(s);
+	assert.ok(!text.includes('"queue"') && !text.includes('introShown'));
+	const next = importProfile(text, migrate({ queue: [item('waiting')] }));
+	assert.equal(next.queue.length, 1, 'this vault\'s batch stays');
+});
+
+test('a "links" property row migrates; an unknown type still falls back to text', () => {
+	const s = migrate({ propertyRows: [{ key: 'teaches', value: '{{concepts}}', type: 'links' }] });
+	assert.deepEqual(s.propertyRows, [{ key: 'teaches', value: '{{concepts}}', type: 'links' }]);
+});
+
 test('lines() reads one entry per line', () => {
 	assert.deepEqual(lines(' a \r\n\n b\n'), ['a', 'b']);
 });

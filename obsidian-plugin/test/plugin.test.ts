@@ -47,13 +47,14 @@ function walk(defs: Def[], out: Def[] = []): Def[] {
 }
 const PluginClass = (require('./.build/main.cjs') as { default: new (app: unknown, m: unknown) => Loaded }).default;
 
-const app = { workspace: { getActiveFile: () => null, on: () => ({}) }, vault: { getFiles: () => [] } };
+const app = { workspace: { getActiveFile: () => null, on: () => ({}), onLayoutReady: (f: () => void) => f() }, vault: { getFiles: () => [] } };
 
 test('the plugin loads, registers its commands, and keeps saved settings', async () => {
 	const p = new PluginClass(app, { id: 'paper2chapter' });
 	p.data = { outputFolder: 'Reading/Chapters' };
 	await p.onload();
 	assert.deepEqual(p.commands.map((c) => c.id).sort(), [
+		'batch-add-folder', 'batch-add-this-pdf', 'batch-add-zotero-collection', 'batch-show',
 		'generate-from-active-pdf', 'generate-from-pdf', 'import-chapter', 'preview-note', 'start-backend', 'stop-backend',
 	]);
 	assert.equal(p.tabs.length, 1);
@@ -74,7 +75,7 @@ test('settings saved by 0.1.1 are migrated on load, and still write the 0.1.1 no
 	const p = new PluginClass(app, { id: 'paper2chapter' });
 	p.data = { outputFolder: 'Reading/Chapters', attachments: 'img', audience: 'graduate' };
 	await p.onload();
-	assert.equal(p.settings.settingsVersion, 2);
+	assert.equal(p.settings.settingsVersion, 3);
 	assert.equal(p.settings.layout, 'paper2chapter');
 	assert.equal(p.settings.outputFolder, 'Reading/Chapters');
 });
@@ -85,13 +86,18 @@ test('every setting in the tab is a real setting, and its checks reject bad valu
 	const tab = p.tabs[0] as Tab;
 	const defs = walk(tab.getSettingDefinitions());
 	const headings = defs.filter((d) => d.heading || d.type === 'page').map((d) => d.heading ?? d.name);
-	for (const h of ['Backend', 'Model', 'Sources', 'Chapters', 'Note format', 'Properties', 'Settings profile']) assert.ok(headings.includes(h), h);
+	for (const h of ['Backend', 'Model', 'Sources', 'Prerequisites and concepts', 'Chapters', 'Note format', 'Properties',
+		'Integrations', 'Learning outputs', 'Batch', 'Settings profile']) assert.ok(headings.includes(h), h);
+	const names = defs.map((d) => d.name);
+	for (const n of ['Knowledge OS', 'Note Relatives', 'Dataview', 'Templater', 'Spaced Repetition']) assert.ok(names.includes(n), `a row for ${n}`);
 	const controls = defs.filter((d) => d.control).map((d) => d.control!);
 	const keys = new Set(Object.keys(p.settings));
 	for (const c of controls) assert.ok(keys.has(c.key), `${c.key} is a setting`);
 	const bad: Record<string, unknown> = {
 		outputFolder: '{{yaer}}', noteName: ' ', quietHours: 'late', pageLinkTemplate: 'zotero://x', pdfFolders: 'relative',
-		zoteroUrl: 'localhost', sectionHeading: '{{nope}}',
+		zoteroUrl: 'localhost', sectionHeading: '{{nope}}', knownRules: 'status mastered', conceptFilter: 'oops',
+		teachesKey: 'bad name!', prerequisitesKey: '', manifestPath: '{{slugg}}.json', flashcardTag: 'my cards',
+		flashcardTemplate: '{{question}}', afterCommands: 'no:such-command',
 	};
 	for (const [key, value] of Object.entries(bad)) {
 		const c = controls.find((x) => x.key === key);
@@ -101,4 +107,17 @@ test('every setting in the tab is a real setting, and its checks reject bad valu
 	}
 	await tab.setControlValue('headingLevel', '3');
 	assert.equal(p.settings.headingLevel, 3, 'a level chosen from a dropdown is kept as a number');
+});
+
+test('the optional plugins are named once, in a notice that does not come back', async () => {
+	stub.notices.length = 0;
+	const p = new PluginClass(app, { id: 'paper2chapter' });
+	await p.onload();
+	assert.equal(stub.notices.length, 1);
+	assert.match(stub.notices[0]!, /Knowledge OS, Note Relatives, Dataview, Templater and Spaced Repetition/);
+	assert.match(stub.notices[0]!, /none is needed/);
+	const again = new PluginClass(app, { id: 'paper2chapter' });
+	again.data = p.data;
+	await again.onload();
+	assert.equal(stub.notices.length, 1, 'shown once, ever');
 });

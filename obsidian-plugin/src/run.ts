@@ -6,16 +6,22 @@
  * modification time, and reuses the extraction and analysis while the file is unchanged. That saves plan usage.
  */
 import { ApiError, type ExportOptions, type Paper2ChapterClient } from './api.ts';
-import { CHAPTER_ROWS, isClassicNote, lines, type P2CSettings, type PaperCacheEntry } from './config.ts';
+import {
+	ConceptIndex, conceptLinks, suggestReview, teachSuggestions, type ConceptNote, type ReviewEnv, type ReviewRow,
+} from './concepts.ts';
+import { CHAPTER_ROWS, conceptRows, isClassicNote, lines, type P2CSettings, type PaperCacheEntry } from './config.ts';
+import { flashcards } from './flashcards.ts';
 import { renderProperties, withoutFrontmatter } from './frontmatter.ts';
+import { kosApi, kosBlock, nrBlock, nrSettings, withBlocks, type PluginLookup } from './integrations.ts';
+import { buildManifest, manifestText } from './manifest.ts';
 import { quietDelay, resolveFolder, resolveName } from './output.ts';
 import type { PaperIdentity } from './paperNote.ts';
 import { pathToFileUrl, type PaperMeta } from './sources.ts';
 import { renderBody, TEXTBOOK_TEMPLATE } from './template.ts';
 import { buildTokens, fill, type FormatDate, type Tokens } from './tokens.ts';
-import type { ChapterParts, Estimate, GenerationOptions, PaperAnalysis, PaperRecord } from './types.ts';
+import type { ChapterParts, Estimate, GenerationOptions, PaperAnalysis, PaperRecord, Prerequisite } from './types.ts';
 import { usablePageLink } from './validate.ts';
-import { writeChapter, type VaultLike, type WriteResult } from './writer.ts';
+import { defuse, ensureFolder, normalizeFolder, uniquePath, writeChapter, type VaultLike, type WriteResult } from './writer.ts';
 
 export type { PaperCacheEntry } from './config.ts';
 
@@ -48,9 +54,19 @@ export interface NoteEnv {
 	formatDate: FormatDate;
 	now: () => Date;
 	wait: (ms: number) => Promise<void>;
-	paperNote: (who: PaperIdentity) => { linktext: string; folder: string } | null;
+	paperNote: (who: PaperIdentity) => { linktext: string; folder: string; path?: string } | null;
 	template: (path: string) => Promise<string>;
 	attachmentPath?: (filename: string, notePath: string) => Promise<string>;
+	/** The concept notes and what is known (Prerequisites and concepts); absent: nothing is matched. */
+	review?: ReviewEnv;
+	/** Other plugins, for the integrations; absent: none is installed. */
+	plugins?: PluginLookup;
+}
+
+/** What the reader confirmed before the chapter was generated: each prerequisite's note, and what it teaches. */
+export interface Review {
+	rows: ReviewRow[];
+	teaches: ConceptNote[];
 }
 
 export interface OutputOptions {
@@ -81,6 +97,10 @@ export class ChapterRun {
 	paperId = '';
 	analysis: PaperAnalysis | null = null;
 	estimate: Estimate | null = null;
+	/** The backend already has a chapter for this paper: writing it needs no generation. */
+	hasChapter = false;
+	/** The reader's review, kept from the form to the note; absent (an import, a batch): matched again when writing. */
+	review: Review | null = null;
 	private signal = { aborted: false };
 	private client: Paper2ChapterClient;
 	private vault: VaultLike;
@@ -129,6 +149,7 @@ export class ChapterRun {
 				await this.wait(['analyzed', 'ready'], 'analyze', on);
 			}
 		}
+		this.hasChapter = rec.has_chapter;
 		this.analysis = await this.client.analysis(this.paperId);
 		try {
 			this.estimate = await this.client.estimate(this.paperId);
@@ -245,7 +266,8 @@ export class ChapterRun {
 		const { pdfLink, pageLink } = this.links(s, buildTokens(sources), fd);
 		const ex: ExportOptions = { solutions: s.solutions, assetPrefix: '', pdfLink, pageLink };
 
-		const needParts = !classic || s.propertiesMode === 'custom'
+		const review = s.matchConcepts ? env.review ?? null : null;
+		const needParts = !classic || s.propertiesMode === 'custom' || s.manifest || !!review
 			|| usesAny([s.outputFolder, s.noteName], PARTS_TOKENS);
 		const parts: ChapterParts | null = needParts ? await this.client.exportParts(paperId, ex) : null;
 		const who: PaperIdentity = {
@@ -253,6 +275,8 @@ export class ChapterRun {
 			doi: parts?.paper.doi || sources.doi, arxiv: parts?.paper.arxiv || sources.arxiv, title: paperTitle,
 		};
 		const paperNote = lines(s.paperNoteKeys).length ? env.paperNote(who) : null;
+		const { rows, teaches } = await this.reviewed(parts, review, paperTitle);
+		const primed = new Set((parts?.prerequisites ?? []).filter((x) => x.primed).map((x) => x.id));
 		const tokens = buildTokens({
 			...sources,
 			chapterTitle: parts?.title,
@@ -263,31 +287,111 @@ export class ChapterRun {
 			arxiv: who.arxiv ?? '',
 			paperNote,
 			provider: parts?.provider, model: parts?.model, audience: parts?.audience, generated: parts?.generated_at,
+			concepts: review ? conceptLinks(rows, teaches, primed) : null,
 		});
+		// a token from the paper (its title, say) never brings a Templater tag in, whatever the Templater setting
+		const safe: Tokens = Object.fromEntries(Object.entries(tokens).map(([k, v]) =>
+			[k, Array.isArray(v) ? v.map(defuse) : v === undefined ? v : defuse(v)]));
 		const folder = resolveFolder(s.outputFolder, tokens, fd);
 		const name = resolveName(s.noteName, tokens, fd, paperTitle);
+
+		const plugins = env.plugins;
+		const nr = s.noteRelatives && plugins ? nrSettings(plugins) : null;
+		const kos = s.knowledgeOs && review && plugins ? kosApi(plugins) : null;
+		const blocks = [nr ? nrBlock(nr) : '', kos ? kosBlock(s.teachesKey, s.prerequisitesKey) : ''].filter(Boolean);
+		const cards = s.flashcards !== 'none' && parts?.exercises?.length
+			? flashcards(parts.exercises, { mode: s.flashcards, tag: s.flashcardTag, template: s.flashcardTemplate }) : '';
+		const rowsFor = s.propertiesMode === 'custom' ? s.propertyRows : [...CHAPTER_ROWS, ...(review ? conceptRows(s) : [])];
 
 		const markdown = async (prefix: string) => {
 			if (classic || s.layout === 'paper2chapter') {
 				const md = await this.client.exportMarkdown(paperId, { ...ex, assetPrefix: prefix });
 				if (classic) return md;
-				const fm = renderProperties(s.propertyRows, tokens, fd);
-				const body = withoutFrontmatter(md.markdown);
-				return { markdown: fm ? fm + body : body.replace(/^\n+/, ''), assets: md.assets };
+				const fm = renderProperties(rowsFor, safe, fd);
+				let body = withoutFrontmatter(md.markdown);
+				if (cards) body = body.trimEnd() + '\n\n## Flashcards\n\n' + cards;
+				const text = fm ? fm + body : body.replace(/^\n+/, '');
+				return { markdown: withBlocks(text, blocks), assets: md.assets };
 			}
 			const p = parts!;
 			const template = s.layout === 'textbook' ? TEXTBOOK_TEMPLATE : await env.template(s.templatePath);
-			let body = renderBody(template, p, { headingLevel: s.headingLevel, sectionHeading: s.sectionHeading, examples: s.examples }, tokens, fd);
+			const extra = { progress: kos ? kosBlock(s.teachesKey, s.prerequisitesKey) : '', flashcards: cards };
+			let body = renderBody(template, p, { headingLevel: s.headingLevel, sectionHeading: s.sectionHeading, examples: s.examples }, safe, fd, extra);
+			if (cards && !template.includes('{{flashcards}}')) body = body.trimEnd() + '\n\n## Flashcards\n\n' + cards;
 			// the parts came without the figures' prefix: their embeds take it here
 			for (const a of p.assets) body = body.split(`![[${a}]]`).join(`![[${prefix}${a}]]`);
-			const fm = renderProperties(s.propertiesMode === 'custom' ? s.propertyRows : CHAPTER_ROWS, tokens, fd);
-			return { markdown: fm ? `${fm}\n${body}` : body, assets: p.assets };
+			const fm = renderProperties(rowsFor, safe, fd);
+			return { markdown: withBlocks(fm ? `${fm}\n${body}` : body, blocks), assets: p.assets };
 		};
 		const res = await writeChapter(this.vault, { markdown, asset: (n) => this.client.asset(paperId, n) }, {
 			folder, attachments: s.attachments, title: name, figures: s.figures, figuresFolder: s.figuresFolder,
 			onExists: s.onExists, attachmentPath: env.attachmentPath,
+			defuseAll: !(s.templater && s.layout === 'template'),
 		});
+		if (s.manifest && !res.skipped) {
+			res.manifestPath = await this.writeManifest(s.manifestPath, tokens, fd, buildManifest({
+				note: res.notePath, written: env.now().toISOString(), parts, rows, teaches,
+				paper: {
+					title: paperTitle, authors: tokens.authors as string[], year: String(tokens.year ?? ''), doi: who.doi ?? '',
+					arxiv: who.arxiv ?? '', paperId, pdf: sources.pdf,
+					zotero: this.pdf.zotero ? { item: this.pdf.zotero.itemKey, pdf: this.pdf.zotero.pdfKey } : null,
+					note: paperNote ? paperNote.path ?? paperNote.linktext : null,
+				},
+			}));
+		}
 		on({ phase: 'done', progress: 1, message: res.skipped ? `A note named ${res.notePath} is there already: nothing written` : `Wrote ${res.notePath}` });
 		return res;
+	}
+
+	/**
+	 * Each prerequisite with its note, and what the chapter teaches: the reader's review when there was one, else
+	 * matched now (one candidate only). Whether a prerequisite was known is what the chapter was generated with.
+	 */
+	private async reviewed(parts: ChapterParts | null, env: ReviewEnv | null, paperTitle: string): Promise<Review> {
+		const prereqs = parts?.prerequisites ?? [];
+		let rows: ReviewRow[];
+		let teaches: ConceptNote[] = [];
+		if (env && this.review) {
+			({ rows, teaches } = this.review);
+		} else if (env) {
+			const asked: Prerequisite[] = prereqs.map((p) => ({ id: p.id, name: p.name, why_needed: p.why_needed, level: p.level as Prerequisite['level'] }));
+			rows = await suggestReview(asked, env);
+			teaches = teachSuggestions(paperTitle, new ConceptIndex(env.notes()));
+		} else {
+			rows = prereqs.map((p) => ({ id: p.id, name: p.name, level: p.level, why: p.why_needed, candidates: [], note: null, known: p.known, suggested: null }));
+		}
+		if (parts) {
+			const known = new Set(prereqs.filter((p) => p.known).map((p) => p.id));
+			rows = rows.map((r) => ({ ...r, known: known.has(r.id) }));
+		}
+		return { rows, teaches };
+	}
+
+	/** The manifest at its path template, never over another file. */
+	private async writeManifest(template: string, tokens: Tokens, fd: FormatDate, manifest: ReturnType<typeof buildManifest>): Promise<string> {
+		const path = normalizeFolder(fill(template, tokens, fd).replace(/[\\]/g, '/')).replace(/\.json$/i, '');
+		const parts = path.split('/');
+		const base = (parts.pop() || 'chapter').replace(/[:*?"<>|#^[\]]/g, ' ').trim() || 'chapter';
+		const folder = parts.join('/');
+		await ensureFolder(this.vault, folder);
+		const target = await uniquePath(this.vault, folder, base, 'json');
+		await this.vault.createText(target, manifestText(manifest));
+		return target;
+	}
+
+	/** Where the note for this paper would be written, before it is generated (the batch skips a paper whose note is there). */
+	plannedNotePath(s: P2CSettings, env: NoteEnv): string {
+		const meta = this.pdf.meta ?? {};
+		const a = this.analysis;
+		const paperTitle = a?.title || meta.title || this.pdf.name.replace(/\.pdf$/i, '');
+		const tokens = buildTokens({
+			paperTitle, authors: a?.authors ?? meta.authors ?? [], year: a?.year ?? meta.year ?? '', field: a?.field ?? '',
+			doi: meta.doi ?? '', arxiv: meta.arxiv ?? '', zoteroKey: this.pdf.zotero?.itemKey ?? '', paperId: this.paperId,
+			paperNote: lines(s.paperNoteKeys).length ? env.paperNote({ pdfPath: this.pdf.absPath ?? this.pdf.path, zoteroKey: this.pdf.zotero?.itemKey,
+				doi: meta.doi, arxiv: meta.arxiv, title: paperTitle }) : null,
+		});
+		const folder = normalizeFolder(resolveFolder(s.outputFolder, tokens, env.formatDate));
+		const name = resolveName(s.noteName, tokens, env.formatDate, paperTitle);
+		return (folder ? `${folder}/` : '') + `${name}.md`;
 	}
 }

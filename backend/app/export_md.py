@@ -141,6 +141,24 @@ class ExamplePart(BaseModel):
     md: str
 
 
+class ExercisePart(BaseModel):
+    """One exercise as data, every text made inert: what flashcards and a chapter manifest are made of."""
+    id: str
+    where: Literal["primer", "section", "practice"]
+    section: int | None = None          # the section's number, for a section's check question
+    prerequisite_id: str | None = None  # the prerequisite, for a primer's check
+    kind: str
+    difficulty: str
+    prompt: str
+    choices: list[str]
+    correct_choice: int | None = None
+    answer: str                         # kept whatever include_solutions says: a card or a manifest needs it
+    explanation: str
+    starter_code: str | None = None
+    solution_code: str | None = None
+    check: VerificationStatus | None = None
+
+
 class SectionPart(BaseModel):
     id: str
     number: int
@@ -181,6 +199,7 @@ class ChapterParts(BaseModel):
     references: str
     warnings: str
     assets: list[str]
+    exercises: list[ExercisePart] = []  # every exercise in the note's order: primers, sections, practice
 
 
 @dataclass
@@ -300,6 +319,19 @@ class _Writer:
                     sol.append("Tests:\n\n```python\n" + _safe_code(ex.test_code) + "\n```")
             body.append(self.callout("success", "Solution", "\n\n".join(s for s in sol if s), folded=True))
         return self.callout("question", title, "\n\n".join(b for b in body if b))
+
+    def exercise_part(self, ex: Exercise, where: str, section: int | None = None,
+                      prerequisite_id: str | None = None) -> ExercisePart:
+        v = self.ch.verification.get("ex:" + ex.id)
+        return ExercisePart(
+            id=_plain(ex.id), where=where, section=section,
+            prerequisite_id=_plain(prerequisite_id) if prerequisite_id else None,
+            kind=ex.kind, difficulty=ex.difficulty, prompt=self.md(ex.prompt_md),
+            choices=[self.md(c) for c in ex.choices], correct_choice=ex.correct_choice,
+            answer=self.md(ex.answer_md), explanation=self.md(ex.explanation_md),
+            starter_code=_safe_code(ex.starter_code) if ex.starter_code else None,
+            solution_code=_safe_code(ex.solution_code) if ex.solution_code else None,
+            check=v.status if v else None)
 
     # ---------------------------------------------------------------- document
 
@@ -455,6 +487,11 @@ class _Writer:
                           doi=ids.doi, arxiv=ids.arxiv, page_count=page_count)
         one_line = self.md(analysis.one_sentence_summary) if analysis else ""
         new = "\n".join(f"- {self.md(c)}" for c in analysis.key_contributions) if analysis else ""
+        exercises = [self.exercise_part(p.check_question, "primer", prerequisite_id=p.prerequisite_id)
+                     for p in ch.primers]
+        exercises += [self.exercise_part(q, "section", section=i)
+                      for i, s in enumerate(ch.sections, 1) for q in s.check_questions]
+        exercises += [self.exercise_part(q, "practice") for q in ch.practice]
         return ChapterParts(
             paper_id=_plain(ch.paper_id), title=_plain(ch.title), generated_at=_plain(ch.generated_at),
             provider=_plain(ch.provider), model=_plain(ch.model), audience=ch.options.audience,
@@ -462,7 +499,7 @@ class _Writer:
             about=b.about, one_line=one_line, new_or_surprising=new, objectives=b.objectives, intuition=b.intuition,
             primers=b.primers, notation=b.notation, sections=b.sections, summary=b.summary, takeaways=b.takeaways,
             misconceptions=b.misconceptions, practice=b.practice, further_reading=b.further_reading,
-            references=b.references, warnings=b.warnings, assets=self.assets)
+            references=b.references, warnings=b.warnings, assets=self.assets, exercises=exercises)
 
     def frontmatter(self) -> str:
         ch = self.ch

@@ -30,6 +30,10 @@ export const TOKEN_HELP: Record<string, string> = {
 	model: 'the model',
 	audience: 'the audience',
 	generated: 'when the chapter was generated (ISO time)',
+	concepts: 'the concept notes the chapter teaches, as link targets (when concepts are matched)',
+	primedConcepts: 'the matched prerequisites the chapter teaches in a primer',
+	assumedConcepts: 'every prerequisite matched to a concept note: what the chapter assumes',
+	knownConcepts: 'the matched prerequisites you knew',
 	'date:FORMAT': "today's date, e.g. {{date:YYYY-MM-DD}}",
 };
 
@@ -92,6 +96,7 @@ export interface TokenSources {
 	model?: string;
 	audience?: string;
 	generated?: string;
+	concepts?: { teaches: string[]; primed: string[]; assumed: string[]; known: string[] } | null;
 }
 
 export function buildTokens(s: TokenSources): Tokens {
@@ -118,5 +123,9 @@ export function buildTokens(s: TokenSources): Tokens {
 		model: s.model ?? '',
 		audience: s.audience ?? '',
 		generated: s.generated ?? '',
+		concepts: s.concepts?.teaches ?? [],
+		primedConcepts: s.concepts?.primed ?? [],
+		assumedConcepts: s.concepts?.assumed ?? [],
+		knownConcepts: s.concepts?.known ?? [],
 	};
 }

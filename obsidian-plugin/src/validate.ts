@@ -2,6 +2,7 @@
  * Checks for what a reader types in the settings. Each returns '' when the value is fine, else one sentence to show
  * beside the setting. The settings tab shows them as the value is typed; the writer runs them again before use.
  */
+import { parseRules } from './concepts.ts';
 import type { PropertyRow } from './config.ts';
 import { KEY_RE } from './frontmatter.ts';
 import { parseQuiet } from './output.ts';
@@ -79,4 +80,39 @@ export function checkRows(rows: PropertyRow[]): string {
 
 export function checkTemplateText(text: string): string {
 	return templateProblems(text, TOKEN_NAMES).join(' ');
+}
+
+export function checkRulesText(text: string): string {
+	return parseRules(text).problems.join(' ');
+}
+
+export function checkPropertyName(v: string): string {
+	const k = v.trim();
+	if (!k) return 'A property needs a name.';
+	return KEY_RE.test(k) ? '' : 'A property name is letters, digits, spaces, dots, hyphens and underscores, and starts with a letter.';
+}
+
+export function checkManifestPath(t: string): string {
+	if (!t.trim()) return 'Type a path for the manifest, for example Paper chapters/manifests/{{paperSlug}}.json.';
+	const bad = unknownTokens(t);
+	if (bad.length) return `Unknown tokens: ${bad.map((n) => `{{${n}}}`).join(', ')}.`;
+	if (/(^|\/)\.\.(\/|$)/.test(t.replace(/\\/g, '/'))) return 'A manifest cannot go above the vault.';
+	return '';
+}
+
+export function checkFlashcardTag(t: string): string {
+	if (!t.trim()) return '';
+	return /^#?[^\s#]+$/.test(t.trim()) ? '' : 'A tag has no spaces: flashcards, or flashcards/papers.';
+}
+
+export function checkFlashcardTemplate(t: string): string {
+	const missing = ['question', 'answer'].filter((n) => !t.includes(`{{${n}}}`));
+	return missing.length ? `A card needs ${missing.map((n) => `{{${n}}}`).join(' and ')}.` : '';
+}
+
+/** Command ids, one per line, each one Obsidian knows (`known`). */
+export function checkCommands(text: string, known: (id: string) => boolean): string {
+	const bad = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !known(l));
+	if (!bad.length) return '';
+	return bad.length === 1 ? `No command with the id ${bad[0]}.` : `No commands with the ids ${bad.join(', ')}.`;
 }

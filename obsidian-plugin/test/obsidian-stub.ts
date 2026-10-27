@@ -81,3 +81,8 @@ export class Component {
 }
 export const MarkdownRenderer = { render: async () => {} };
 export const moment = () => ({ format: (f: string) => f });
+export class TFolder {
+	path = '';
+	isRoot() { return this.path === ''; }
+}
+export const getAllTags = (): string[] => [];

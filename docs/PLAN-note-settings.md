@@ -20,6 +20,11 @@ setting**, so the plugin fits a vault instead of a vault fitting the plugin, and
 | N4 | What a reader knows, and their progress, is never written into a chapter note; an integration that tracks it draws it live. | It changes with every study session; a written copy is stale the next day. |
 | N5 | The plugin never edits an existing note or another plugin's settings. Every integration is optional and detected; when its plugin is missing, the settings say what it adds and how to get it, and the first-run notice says so once. Nothing is installed for the user. | Robust in any vault, and no nagging. |
 | N6 | Two of the S3 integrations, **Knowledge OS** and **Note Relatives**, are written by the author of this contribution. They are listed beside the third-party integrations with the same wording, and the maintainer decides in review whether they stay. | Said plainly, so the maintainer can judge it. |
+| N8 | The tokens for matched prerequisites are `{{assumedConcepts}}` (every one), `{{primedConcepts}}` and `{{knownConcepts}}`, beside `{{concepts}}` (what it teaches); the property that holds them is `prerequisites` by default. | `{{prerequisites}}` is already a template piece (the list of prerequisites with their state); one name with two meanings would confuse. |
+| N9 | The backend gives every exercise as data in `export.parts` (`exercises`, backend 0.4.0, parts still `version: 1`). | Flashcards and the manifest need the question, the options and the answer apart; parsing them back out of rendered callouts would be fragile. |
+| N10 | The Knowledge OS is used only through an API its plugin publishes (`api.version` ≥ 1, `status(names)`), and its block names the two properties it reads. Without that API nothing is asked and no block is written; the API and the block's renderer are the Knowledge OS's own work, in its repository. | A vault without it, or with an older version, never shows a raw code block or a broken call. |
+| N11 | A batch is not reviewed: each paper is generated with what the rules, the Knowledge OS or Dataview say is known, and a prerequisite links to a note only when its name fits one. | A queue that waits for the reader at every paper is no batch; the single-paper window stays the place to confirm. |
+| N12 | Unmatched prerequisites (a line in a note, or stub notes) are left for later. | Not asked for in this phase; a vault can read them from the manifest. |
 
 ## Phases (one pull request each)
 
@@ -61,17 +66,17 @@ vault in memory, so what it shows is what a chapter gets.
 
 ### S3. Plugin: reader profile, integrations, chapter manifest
 
-- [ ] Known concepts from rules (folder, tag, property values; a Dataview query when Dataview is installed);
-      prerequisites matched to notes by name and aliases, confirmed by the reader in the review table.
-- [ ] A prerequisites property, beside the concepts a chapter teaches.
-- [ ] Integrations, each detected and each recommended when missing: Zotero, Templater (the template's own tags
-      only), Dataview, Spaced Repetition (cards from the questions), commands to run after writing, Knowledge OS
-      (known concepts, and a live progress block), Note Relatives (its block, and a check that it shows the
-      chapter's properties).
-- [ ] A chapter manifest (JSON, documented in `docs/`) for tools that track learning: the paper, each prerequisite
-      with its match and whether it was known, the primers, the concepts, the exercises.
-- [ ] Batch: a queue of papers, one at a time, kept across restarts.
-- [ ] `docs/OBSIDIAN.md` documents every setting.
+- [x] Known concepts from rules (folder, tag, property values; a Dataview source when Dataview is installed);
+      prerequisites matched to notes by name, title and aliases, confirmed by the reader in the review table.
+- [x] A prerequisites property, beside the concepts a chapter teaches (N8).
+- [x] Integrations, each detected and each recommended when missing: Zotero (S2), Templater (the template's own
+      tags only), Dataview, Spaced Repetition (cards from the exercises, N9), commands to run after writing,
+      Knowledge OS (known concepts, and a live progress block, N10), Note Relatives (its block, and a check that it
+      shows the chapter's properties). One notice, once, names those not installed.
+- [x] A chapter manifest (JSON, `docs/MANIFEST.md`) for tools that track learning: the paper, each prerequisite
+      with its match and whether it was known and why, the primers, the concepts, the exercises.
+- [x] Batch: a queue of papers, one at a time, kept across restarts (N11).
+- [x] `docs/OBSIDIAN.md` documents every setting.
 
 ## Results log
 
@@ -84,3 +89,5 @@ vault in memory, so what it shows is what a chapter gets.
 | 2026-10-27 | Live in Obsidian 1.15.0 (scratch vault, 0.1.1's saved settings) | settings migrated (backend folder kept); every group renders, settings search finds the new rows; a check shows its reason as typed; preview renders and sees the vault's existing notes; Textbook with a heading template, gathered examples and a custom row; import of a real chapter (GPT-6 Luna, 47 KB) wrote the note with 48 page links and its figure; Zotero off and not running: a clear message; the picker lists the vault PDF and a PDF from a folder outside the vault; reset works; no console errors; closing the window stopped the backend |
 | 2026-10-27 | Found live, fixed | a failed Zotero search raised a notice per keystroke (now one message in place of the results); the model's own `##` headings sat beside the sections (now moved below, in the template layouts only); property rows did not line up (fixed widths) |
 | 2026-10-27 | Release 0.2.0 | tag `0.2.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |
+| 2026-10-27 | Backend after S3 | 142 passed, 1 skipped (2 new: exercises as data, answers kept without solutions; the inert test covers them) |
+| 2026-10-27 | Plugin after S3 | 112 passed (69 before), the end-to-end test writing concepts, both blocks, flashcards and a manifest through the real backend; lint 0 errors 0 warnings; tsc clean. Not yet checked in a running Obsidian |

@@ -21,6 +21,7 @@ export interface WriteResult {
 	notePath: string;
 	assetPaths: string[];
 	skipped?: boolean; // the name was taken and the reader chose not to write a second note
+	manifestPath?: string; // the chapter manifest, when one was written
 }
 
 export interface WriteOptions {
@@ -32,6 +33,11 @@ export interface WriteOptions {
 	onExists?: 'number' | 'skip';
 	/** Obsidian's own choice of path for an attachment (figures: 'obsidian'). */
 	attachmentPath?: (filename: string, notePath: string) => Promise<string>;
+	/**
+	 * Defuse every Templater tag in the note (the default). Off only for a template note whose own tags Templater
+	 * is to run: its pieces and tokens were defused as they went in.
+	 */
+	defuseAll?: boolean;
 }
 
 /** A file name Obsidian, Windows, macOS and Linux all accept, and that a wikilink can name. */
@@ -55,7 +61,7 @@ function join(folder: string, name: string): string {
 	return folder ? `${folder}/${name}` : name;
 }
 
-async function ensureFolder(vault: VaultLike, folder: string): Promise<void> {
+export async function ensureFolder(vault: VaultLike, folder: string): Promise<void> {
 	if (!folder) return;
 	let path = '';
 	for (const part of folder.split('/')) {
@@ -113,6 +119,6 @@ export async function writeChapter(vault: VaultLike, files: ChapterFiles, opts: 
 		await vault.createBinary(path, await files.asset(name));
 		assetPaths.push(path);
 	}
-	await vault.createText(notePath, defuse(text));
+	await vault.createText(notePath, opts.defuseAll === false ? text : defuse(text));
 	return { notePath, assetPaths };
 }
