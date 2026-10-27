@@ -1,6 +1,6 @@
 # Changelog
 
-## Obsidian plugin 0.2.0 (unreleased)
+## Obsidian plugin 0.2.0 (2026-10-27)
 
 The second step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S2). The defaults
 write the 0.1.1 note in the same place, byte for byte, and 0.1.1's saved settings carry over. Needs backend 0.3.0
@@ -23,7 +23,7 @@ for the Textbook and template layouts and for page-link templates.
   notes (no model, no write); **settings profiles** (export, import, reset); checks as you type for every folder,
   template and URL; a settings version, and migration from 0.1.1.
 
-## Backend 0.3.0 (unreleased)
+## Backend 0.3.0 (2026-10-27)
 
 The first of three steps toward note settings in the Obsidian plugin ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md)).
 `export.md` is unchanged byte for byte, pinned by a snapshot test.
