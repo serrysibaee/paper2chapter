@@ -351,8 +351,11 @@ export class ChapterRun {
 		const prereqs = parts?.prerequisites ?? [];
 		let rows: ReviewRow[];
 		let teaches: ConceptNote[] = [];
-		if (env && this.review) {
-			({ rows, teaches } = this.review);
+		// without the reader's review, the only reason a prerequisite was known is that the chapter was generated so
+		const unreviewed = !this.review;
+		if (this.review) {
+			rows = this.review.rows;
+			teaches = env ? this.review.teaches : [];
 		} else if (env) {
 			const asked: Prerequisite[] = prereqs.map((p) => ({ id: p.id, name: p.name, why_needed: p.why_needed, level: p.level as Prerequisite['level'] }));
 			rows = await suggestReview(asked, env);
@@ -364,6 +367,7 @@ export class ChapterRun {
 			const known = new Set(prereqs.filter((p) => p.known).map((p) => p.id));
 			rows = rows.map((r) => ({ ...r, known: known.has(r.id) }));
 		}
+		if (unreviewed) rows = rows.map((r) => ({ ...r, suggested: r.known ? { by: 'generation' as const } : null }));
 		return { rows, teaches };
 	}
 

@@ -30,6 +30,8 @@ test('Get it: the community page when listed, else BRAT when it is installed, el
 
 test('the state a row shows: on, installed but off, not installed, and the Knowledge OS without its API', () => {
 	assert.equal(integrationState(INTEGRATIONS.dataview, lookup({ dataview: {} })).kind, 'ready');
+	// said of the plugin, not of this row's switch: "is on" read as the switch beside it
+	assert.equal(integrationState(INTEGRATIONS.dataview, lookup({ dataview: {} })).text, 'Dataview is installed and enabled.');
 	assert.equal(integrationState(INTEGRATIONS.dataview, lookup({ dataview: { enabled: false } })).kind, 'disabled');
 	assert.equal(integrationState(INTEGRATIONS.dataview, lookup({})).kind, 'missing');
 	const old = integrationState(INTEGRATIONS.knowledgeOs, lookup({ 'knowledge-os': { instance: {} } }));

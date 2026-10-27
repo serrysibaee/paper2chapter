@@ -83,7 +83,7 @@ export function integrationState(spec: IntegrationSpec, lookup: PluginLookup): I
 	if (spec.id === INTEGRATIONS.knowledgeOs.id && !kosApi(lookup)) {
 		return { kind: 'outdated', text: `This version of ${spec.name} has no API for other plugins yet: it needs 1.1 or later.` };
 	}
-	return { kind: 'ready', text: `${spec.name} is on.` };
+	return { kind: 'ready', text: `${spec.name} is installed and enabled.` };
 }
 
 // ---------------------------------------------------------------- Knowledge OS

@@ -49,9 +49,9 @@ export interface Manifest {
 		id: string; name: string; level: string; why_needed: string;
 		note: string | null; // the concept note it matched, as the reader confirmed it
 		known: boolean;
-		known_by: 'rule' | 'knowledge-os' | 'dataview' | 'reader' | null;
+		known_by: 'rule' | 'knowledge-os' | 'dataview' | 'reader' | 'generation' | null;
 		reason: string;
-		suggested: boolean; // pre-ticked before the reader looked
+		suggested: boolean; // pre-ticked before the reader looked (never for a chapter written without a review)
 		primed: boolean; // the chapter teaches it in a primer
 	}[];
 	teaches: string[];
@@ -79,7 +79,8 @@ export function buildManifest(i: ManifestInput): Manifest {
 			const by = r.known ? (r.suggested?.by ?? 'reader') : null;
 			return {
 				id: r.id, name: r.name, level: r.level, why_needed: r.why, note: r.note?.path ?? null, known: r.known,
-				known_by: by, reason: r.known ? knownText(r.suggested ?? { by: 'reader' }) : '', suggested: !!r.suggested,
+				known_by: by, reason: r.known ? knownText(r.suggested ?? { by: 'reader' }) : '',
+				suggested: !!r.suggested && r.suggested.by !== 'generation',
 				primed: primed.has(r.id),
 			};
 		}),

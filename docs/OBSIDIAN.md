@@ -177,8 +177,12 @@ With *Properties* on paper2chapter's own rows, the two properties are added afte
 (matched prerequisites the chapter teaches in a primer), `{{assumedConcepts}}` (every matched prerequisite) and
 `{{knownConcepts}}` (the ones you knew) hold the notes as link targets.
 
+A note you pick in the review is judged as a match would be: it comes ticked, with its reason, when a rule, the
+Knowledge OS or Dataview says you know it, unless you have set that tick yourself.
+
 A chapter imported later, or made by the batch, is matched again when it is written: only a name that fits one
-note links it, and what was known is what the chapter was generated with.
+note links it, and what was known is what the chapter was generated with (the manifest says so, rather than
+giving today's reason).
 
 ### Chapters
 

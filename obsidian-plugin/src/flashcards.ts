@@ -19,10 +19,19 @@ function question(e: ExercisePart): string {
 	return [e.prompt, ...(opts.length ? [opts.join('\n')] : [])].join('\n');
 }
 
+/** Text compared for sameness: no case, emphasis, spaces or a closing full stop. */
+const same = (a: string, b: string) => {
+	const n = (s: string) => s.toLowerCase().replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+	return n(a) === n(b);
+};
+
+/** The right option first, the answer unless it only repeats that option, a coding exercise's solution, the why. */
 function answer(e: ExercisePart): string {
-	const right = e.correct_choice !== null && e.choices[e.correct_choice] !== undefined
-		? `**${letter(e.correct_choice)}.** ${e.choices[e.correct_choice]}` : '';
-	return [right, e.answer, e.explanation].filter((x) => x.trim()).join('\n\n');
+	const choice = e.correct_choice !== null ? e.choices[e.correct_choice] : undefined;
+	const right = choice !== undefined ? `**${letter(e.correct_choice!)}.** ${choice}` : '';
+	const said = choice !== undefined && same(e.answer, choice) ? '' : e.answer;
+	const code = e.solution_code ? '```python\n' + e.solution_code.trimEnd() + '\n```' : '';
+	return [right, said, code, e.explanation].filter((x) => x.trim()).join('\n\n');
 }
 
 const noBlankLines = (s: string) => s.split('\n').filter((l) => l.trim() !== '').join('\n');

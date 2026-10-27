@@ -1,5 +1,7 @@
 import { App, FuzzySuggestModal, Modal, Setting } from 'obsidian';
-import { knownText, suggestReview, teachSuggestions, ConceptIndex, type ConceptNote, type ReviewRow } from './concepts.ts';
+import {
+	ConceptIndex, knownText, repick, reviewFor, teachSuggestions, type ConceptNote, type KnownSources, type ReviewEnv, type ReviewRow,
+} from './concepts.ts';
 import type Paper2ChapterPlugin from './main.ts';
 import type { ChapterRun, RunStatus } from './run.ts';
 import { AUDIENCES } from './settings.ts';
@@ -26,6 +28,8 @@ export class GenerateModal extends Modal {
 	private run: ChapterRun;
 	private pdfName: string;
 	private modelText: string;
+	private env: ReviewEnv | null = null;
+	private sources: KnownSources | null = null; // what decided the review, for a note the reader picks
 
 	constructor(app: App, plugin: Paper2ChapterPlugin, run: ChapterRun, pdfName: string, modelText: string) {
 		super(app);
@@ -63,9 +67,11 @@ export class GenerateModal extends Modal {
 			await this.plugin.ensureBackend();
 			const analysis = await this.run.prepare((s) => this.status(s));
 			const env = this.plugin.reviewEnv();
-			const rows = env ? await suggestReview(analysis.prerequisites, env) : null;
+			const review = env ? await reviewFor(analysis.prerequisites, env) : null;
 			const teaches = env && this.plugin.settings.matchConcepts ? teachSuggestions(analysis.title, new ConceptIndex(env.notes())) : [];
-			this.form(analysis, rows, teaches, env?.notes() ?? []);
+			this.env = env;
+			this.sources = review?.sources ?? null;
+			this.form(analysis, review?.rows ?? null, teaches, env?.notes() ?? []);
 		} catch (e) {
 			this.fail((e as Error).message, () => void this.prepare());
 		}
@@ -140,12 +146,19 @@ export class GenerateModal extends Modal {
 	private reviewRow(el: HTMLElement, r: ReviewRow, notes: ConceptNote[], matching: boolean): void {
 		const row = new Setting(el).setName(r.name).setDesc(`${r.level} · ${plainCitations(r.why)}`);
 		const info = row.descEl.createDiv({ cls: 'p2c-muted' });
+		let toggle: { setValue(v: boolean): unknown } | null = null;
 		const show = () => {
 			const note = matching ? (r.note ? `Note: ${r.note.basename}` : r.candidates.length > 1 ? 'Several notes fit: pick one' : 'No concept note') : '';
 			const why = r.known && r.suggested ? knownText(r.suggested) : '';
 			info.setText([note, why].filter(Boolean).join(' · '));
+			toggle?.setValue(r.known);
 		};
-		show();
+		/** A note picked by the reader is judged as a match would be (concepts.ts `repick`). */
+		const pick = (note: ConceptNote | null) => {
+			r.note = note;
+			show();
+			if (this.sources) void repick(r, note, this.sources, this.env ?? undefined).then(show);
+		};
 		if (matching) {
 			row.addDropdown((d) => {
 				const options = new Map<string, ConceptNote>();
@@ -161,21 +174,25 @@ export class GenerateModal extends Modal {
 							options.set(picked.path, picked);
 							d.addOption(picked.path, picked.basename);
 							d.setValue(picked.path);
-							r.note = picked;
-							show();
+							pick(picked);
 						}).open();
 						d.setValue(r.note?.path ?? '');
 						return;
 					}
-					r.note = v ? options.get(v) ?? null : null;
-					show();
+					pick(v ? options.get(v) ?? null : null);
 				});
 			});
 		}
-		row.addToggle((t) => t.setValue(r.known).onChange((known) => {
-			r.known = known;
-			show();
-		}));
+		row.addToggle((t) => {
+			toggle = t;
+			t.setValue(r.known).onChange((known) => {
+				if (known === r.known) return; // set by show(), not by the reader
+				r.known = known;
+				r.touched = true;
+				show();
+			});
+		});
+		show();
 	}
 
 	/** The concept notes the chapter teaches: suggested from the paper's title, and any the reader adds. */
