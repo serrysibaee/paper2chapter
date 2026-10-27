@@ -84,3 +84,14 @@ test('PDFs in folders outside the vault, hidden folders skipped', () => {
 	assert.deepEqual(listPdfs(['C:\\Lit\\', 'C:/Missing'], fs), ['C:/Lit/b.pdf', 'C:/Lit/sub/A.PDF']);
 	assert.equal(listPdfs(['C:/Lit'], fs, 1).length, 1);
 });
+
+test('a Zotero search says once, in place of the results, why it found nothing', async () => {
+	const { zoteroSuggestions } = await import('../src/sources.ts');
+	const down = new ZoteroClient('http://x', async () => { throw new Error('ECONNREFUSED'); });
+	const r = await zoteroSuggestions(down, 'softmax');
+	assert.deepEqual(r.items, []);
+	assert.match(r.empty, /Is Zotero running/);
+	assert.deepEqual(await zoteroSuggestions(down, 's'), { items: [], empty: 'Type two letters or more.' });
+	const none = new ZoteroClient('http://x', scripted([() => response(200, [])]));
+	assert.equal((await zoteroSuggestions(none, 'nothing')).empty, 'No item in Zotero matches.');
+});

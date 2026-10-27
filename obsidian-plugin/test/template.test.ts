@@ -87,3 +87,18 @@ test('template problems are named', () => {
 	assert.ok(p.some((x) => x.includes('{{#summary}}')));
 	assert.ok(p.some((x) => x.includes('frontmatter')));
 });
+
+test('headings in the model\'s text go below the heading that holds them; code is left alone', async () => {
+	const { demoteHeadings } = await import('../src/template.ts');
+	assert.equal(demoteHeadings('## A\n\ntext\n\n### B\n\n```python\n# not a heading\n```', 3), '### A\n\ntext\n\n#### B\n\n```python\n# not a heading\n```');
+	assert.equal(demoteHeadings('#### deep enough', 3), '#### deep enough');
+	assert.equal(demoteHeadings('no headings', 3), 'no headings');
+	assert.equal(demoteHeadings('# A\n###### F', 2), '## A\n###### F', 'never deeper than six');
+	const s = { ...P.sections[0]!, body: 'Intro.\n\n## The problem\n\nMore.', derivations: [{ title: 'D', md: '## Step\n\nx' }] };
+	const out = renderSection(s, OPTS, tokens, fd);
+	assert.ok(out.includes('\n### The problem\n') && out.includes('### Derivation: D\n\n#### Step'));
+	const deep = renderSection(s, { ...OPTS, headingLevel: 3 }, tokens, fd);
+	assert.ok(deep.includes('\n#### The problem\n'));
+	const f = fragments({ ...P, summary: 'Sum.\n\n## Why it matters\n\nBecause.', intuition: '# Big picture' }, OPTS, tokens, fd);
+	assert.ok(f.summary.includes('### Why it matters') && f.intuition === '### Big picture');
+});

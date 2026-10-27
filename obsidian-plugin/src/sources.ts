@@ -122,6 +122,17 @@ export class ZoteroClient {
 	}
 }
 
+/** What a Zotero picker shows for a query: the items, or one sentence in their place saying why there are none. */
+export async function zoteroSuggestions(z: ZoteroClient, query: string): Promise<{ items: ZoteroItem[]; empty: string }> {
+	if (query.trim().length < 2) return { items: [], empty: 'Type two letters or more.' };
+	try {
+		const items = await z.search(query.trim());
+		return { items, empty: items.length ? '' : 'No item in Zotero matches.' };
+	} catch (e) {
+		return { items: [], empty: (e as Error).message };
+	}
+}
+
 export function fileUrlToPath(url: string, platform: string): string {
 	let p = url.replace(/^file:\/\//i, '');
 	try { p = decodeURIComponent(p); } catch { /* keep as written */ }
