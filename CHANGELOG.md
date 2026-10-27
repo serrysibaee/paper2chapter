@@ -15,7 +15,8 @@ for the Textbook and template layouts and for page-link templates.
   fixed folder; when the name is taken, a numbered note or none; quiet hours.
 - **Note format**: layouts (paper2chapter, Textbook, your own template note with placeholders for the chapter's
   pieces, conditional blocks and tokens), the section heading's template and level, worked examples inline or
-  gathered, and page links to the vault PDF, Zotero, the file on this computer, a URL template, or none.
+  gathered, and page links to the vault PDF, Zotero, the file on this computer, a URL template, or none. In these
+  layouts the model's own headings go below the heading that holds them (a section body's "## …" becomes "### …").
 - **Properties**: paper2chapter's frontmatter, or your own rows of a name, a type (text, list, link, number, date,
   checkbox) and a value template; added, removed and reordered in the settings.
 - **Preview** of the note your settings write, from a bundled sample chapter, by the same code that writes real

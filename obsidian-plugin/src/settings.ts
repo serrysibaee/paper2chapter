@@ -304,6 +304,7 @@ export class P2CSettingTab extends PluginSettingTab {
 
 	private renderRow(setting: Setting, row: PropertyRow): void {
 		setting.setName('');
+		setting.settingEl.addClass('p2c-prop-row'); // fixed widths, so the rows line up whatever their type
 		setting.addText((t) => t.setPlaceholder('Property').setValue(row.key).onChange(async (v) => {
 			row.key = v.trim();
 			await this.plugin.saveSettings();

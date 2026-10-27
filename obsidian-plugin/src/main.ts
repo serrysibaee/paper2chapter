@@ -9,7 +9,7 @@ import { findPaperNote, inFolders, type PaperIdentity } from './paperNote.ts';
 import { PreviewModal } from './preview.ts';
 import { ChapterRun, type NoteEnv, type PdfSource, type RunStatus } from './run.ts';
 import { DEFAULT_SETTINGS, P2CSettingTab, type P2CSettings } from './settings.ts';
-import { listPdfs, ZoteroClient, type ZoteroItem } from './sources.ts';
+import { listPdfs, ZoteroClient, zoteroSuggestions, type ZoteroItem } from './sources.ts';
 import type { GenerationOptions, PaperRecord } from './types.ts';
 import type { VaultLike } from './writer.ts';
 
@@ -365,30 +365,22 @@ class SourceSuggest extends FuzzySuggestModal<SourceItem> {
 /** Zotero's items, searched as you type (title, creators, year), through Zotero's local API. */
 class ZoteroSuggest extends SuggestModal<ZoteroItem> {
 	private plugin: Paper2ChapterPlugin;
-	private error = '';
 	constructor(app: App, plugin: Paper2ChapterPlugin) {
 		super(app);
 		this.plugin = plugin;
 		this.setPlaceholder('Search Zotero: title, author or year');
+		this.emptyStateText = 'Type two letters or more.';
 	}
 	async getSuggestions(query: string): Promise<ZoteroItem[]> {
-		if (query.trim().length < 2) return [];
-		try {
-			this.error = '';
-			return await this.plugin.zotero().search(query.trim());
-		} catch (e) {
-			this.error = (e as Error).message;
-			return [];
-		}
+		// why nothing was found (Zotero not running, its API off, no match) shows in place of the list, once
+		const r = await zoteroSuggestions(this.plugin.zotero(), query);
+		this.emptyStateText = r.empty;
+		return r.items;
 	}
 	renderSuggestion(item: ZoteroItem, el: HTMLElement): void {
 		el.createDiv({ text: item.title || '(untitled)' });
 		const who = (item.authors ?? []).slice(0, 3).join(', ') + ((item.authors?.length ?? 0) > 3 ? ' et al.' : '');
 		el.createEl('small', { cls: 'p2c-muted', text: [who, item.year].filter(Boolean).join(' · ') });
-	}
-	onNoSuggestion(): void {
-		super.onNoSuggestion();
-		if (this.error) new Notice(this.error, 8000);
 	}
 	onChooseSuggestion(item: ZoteroItem): void {
 		void this.plugin.openZoteroItem(item);

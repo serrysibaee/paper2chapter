@@ -56,6 +56,36 @@ function callout(kind: string, title: string, body: string): string {
 
 const h = (level: number) => '#'.repeat(Math.max(1, Math.min(6, level)));
 
+/**
+ * Headings in the model's text, moved down so the shallowest is at `minLevel`: a section body's own "## …" would
+ * otherwise sit beside the section's heading instead of under it. Code blocks are left alone; levels stop at six.
+ */
+export function demoteHeadings(md: string, minLevel: number): string {
+	const lines = md.split('\n');
+	const isHeading: boolean[] = [];
+	let fence: string | null = null;
+	let shallowest = 7;
+	for (const line of lines) {
+		const f = line.match(/^\s*(`{3,}|~{3,})/);
+		if (fence) {
+			if (f && f[1]!.startsWith(fence)) fence = null;
+			isHeading.push(false);
+			continue;
+		}
+		if (f) {
+			fence = f[1]!;
+			isHeading.push(false);
+			continue;
+		}
+		const m = line.match(/^(#{1,6})\s/);
+		isHeading.push(!!m);
+		if (m) shallowest = Math.min(shallowest, m[1]!.length);
+	}
+	const shift = shallowest <= 6 ? Math.max(0, minLevel - shallowest) : 0;
+	if (!shift) return md;
+	return lines.map((l, i) => (isHeading[i] ? l.replace(/^(#{1,6})/, (m) => h(m.length + shift)) : l)).join('\n');
+}
+
 function joinParts(parts: string[]): string {
 	return parts.filter((x) => x).join('\n\n');
 }
@@ -80,8 +110,8 @@ export function renderSection(s: SectionPart, opts: FormatOptions, tokens: Token
 	const heading = fill(inlineBlocks(opts.sectionHeading, has), local, formatDate).trim() || s.title;
 	const parts: string[] = [];
 	if (s.intuition) parts.push(callout('tip', 'Intuition', s.intuition));
-	parts.push(s.body);
-	for (const d of s.derivations) parts.push(`${h(level + 1)} Derivation: ${d.title}`, d.md);
+	parts.push(demoteHeadings(s.body, level + 1));
+	for (const d of s.derivations) parts.push(`${h(level + 1)} Derivation: ${d.title}`, demoteHeadings(d.md, level + 2));
 	if (opts.examples === 'inline') {
 		for (const e of s.worked_examples) parts.push(callout('example', `Worked example: ${e.title}${MARK[e.check ?? ''] ?? ''}`, e.md));
 	}
@@ -108,13 +138,14 @@ export function fragments(p: ChapterParts, opts: FormatOptions, tokens: Tokens, 
 		oneLine: p.one_line,
 		newOrSurprising: p.new_or_surprising,
 		objectives: p.objectives,
-		intuition: p.intuition,
+		// a piece sits under a heading of the section level at most: its own headings go one below
+		intuition: demoteHeadings(p.intuition, level + 1),
 		prerequisites: prereq.join('\n'),
-		primers: joinParts(p.primers.map((x) => `${h(level + 1)} ${x.title}` + (x.md ? '\n\n' + x.md : ''))),
+		primers: joinParts(p.primers.map((x) => `${h(level + 1)} ${x.title}` + (x.md ? '\n\n' + demoteHeadings(x.md, level + 2) : ''))),
 		notation: p.notation,
 		sections: joinParts(p.sections.map((s) => renderSection(s, opts, tokens, formatDate))),
 		workedExamples: joinParts(gathered),
-		summary: p.summary,
+		summary: demoteHeadings(p.summary, level + 1),
 		takeaways: p.takeaways,
 		misconceptions: p.misconceptions,
 		practice: joinParts(p.practice),

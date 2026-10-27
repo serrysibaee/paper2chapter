@@ -77,3 +77,24 @@
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
 }
+
+.p2c-prop-row .setting-item-info {
+	display: none;
+}
+
+.p2c-prop-row .setting-item-control {
+	flex: 1 1 auto;
+	justify-content: flex-start;
+}
+
+.p2c-prop-row .setting-item-control > input[type="text"]:first-child {
+	flex: 0 0 11em;
+}
+
+.p2c-prop-row .setting-item-control > select {
+	flex: 0 0 8.5em;
+}
+
+.p2c-prop-row .setting-item-control > input[type="text"]:last-of-type {
+	flex: 1 1 auto;
+}
