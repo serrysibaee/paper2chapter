@@ -52,6 +52,8 @@ setting**, so the plugin fits a vault instead of a vault fitting the plugin, and
 - [x] Tests: the defaults' snapshot (the 0.1.1 note and path, byte for byte); each layout, properties, templates,
       page links, quiet hours, name clashes and figure modes on a scripted backend; the Textbook layout end to end
       on the real backend (mock provider).
+- [x] Tag `0.2.0` (go-ahead given 2026-10-27): https://github.com/serrysibaee/paper2chapter/releases/tag/0.2.0,
+      marked Latest; `main.js`, `manifest.json` and `styles.css` byte-identical to a local build.
 
 N7: the preview and the writer share one code path. The preview runs the real `ChapterRun.write` against the
 bundled sample (`src/sample.ts`, made by `backend/scripts/plugin_sample.py` from the backend's test fixture) and a
@@ -81,3 +83,4 @@ vault in memory, so what it shows is what a chapter gets.
 | 2026-10-26 | Plugin after S2 | 67 passed (41 new), the end-to-end test included; lint 0 errors 0 warnings; tsc clean; main.js 86 KB (the sample chapter is 21 KB of it) |
 | 2026-10-27 | Live in Obsidian 1.15.0 (scratch vault, 0.1.1's saved settings) | settings migrated (backend folder kept); every group renders, settings search finds the new rows; a check shows its reason as typed; preview renders and sees the vault's existing notes; Textbook with a heading template, gathered examples and a custom row; import of a real chapter (GPT-6 Luna, 47 KB) wrote the note with 48 page links and its figure; Zotero off and not running: a clear message; the picker lists the vault PDF and a PDF from a folder outside the vault; reset works; no console errors; closing the window stopped the backend |
 | 2026-10-27 | Found live, fixed | a failed Zotero search raised a notice per keystroke (now one message in place of the results); the model's own `##` headings sat beside the sections (now moved below, in the template layouts only); property rows did not line up (fixed widths) |
+| 2026-10-27 | Release 0.2.0 | tag `0.2.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |

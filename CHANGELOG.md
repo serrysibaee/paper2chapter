@@ -1,6 +1,6 @@
 # Changelog
 
-## Obsidian plugin 0.2.0 (2026-10-27)
+## Obsidian plugin 0.2.0 (2026-10-27, released)
 
 The second step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S2). The defaults
 write the 0.1.1 note in the same place, byte for byte, and 0.1.1's saved settings carry over. Needs backend 0.3.0
