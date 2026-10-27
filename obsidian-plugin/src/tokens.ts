@@ -2,6 +2,7 @@
  * Tokens: the `{{name}}` values that folder, note-name, heading, page-link and property templates may use. A token
  * may hold one value or several (authors); `{{date:FORMAT}}` formats today's date. A token the template names but
  * the paper has no value for becomes empty; a name that is no token is left as written, so a typo shows.
+ * `{{a|b}}` is the first of its tokens that has a value (docs/PLAN-note-settings.md, N15).
  */
 
 export type TokenValue = string | string[] | undefined;
@@ -30,6 +31,8 @@ export const TOKEN_HELP: Record<string, string> = {
 	model: 'the model',
 	audience: 'the audience',
 	generated: 'when the chapter was generated (ISO time)',
+	pages: "the paper's pages, 1–N, from its page count",
+	pageCount: "the paper's number of pages",
 	concepts: 'the concept notes the chapter teaches, as link targets (when concepts are matched)',
 	primedConcepts: 'the matched prerequisites the chapter teaches in a primer',
 	assumedConcepts: 'every prerequisite matched to a concept note: what the chapter assumes',
@@ -39,7 +42,19 @@ export const TOKEN_HELP: Record<string, string> = {
 
 export const TOKEN_NAMES = Object.keys(TOKEN_HELP).filter((k) => !k.includes(':'));
 
-const TOKEN_RE = /\{\{([A-Za-z]+)(?::([^}]*))?\}\}/g;
+/** The tokens that hold a list: a section over one with `{{.}}` is written once per value (N13). */
+export const LIST_TOKENS: readonly string[] = ['authors', 'concepts', 'primedConcepts', 'assumedConcepts', 'knownConcepts'];
+
+/** `{{name}}`, `{{a|b}}` (the first with a value) and `{{date:FORMAT}}`. */
+const TOKEN_RE = /\{\{([A-Za-z]+(?:\|[A-Za-z]+)*)(?::([^}]*))?\}\}/g;
+const NAMES_RE = /\{\{[#/^]?([A-Za-z]+(?:\|[A-Za-z]+)*)(?::[^}]*)?\}\}/g;
+
+/** Every name a template uses, in order, once each: tokens, the names of a fallback, sections, pieces, `date`. */
+export function tokenNames(template: string): string[] {
+	const out: string[] = [];
+	for (const m of template.matchAll(NAMES_RE)) for (const n of m[1]!.split('|')) if (!out.includes(n)) out.push(n);
+	return out;
+}
 
 export function tokenValue(tokens: Tokens, name: string): string[] {
 	const v = tokens[name];
@@ -47,23 +62,23 @@ export function tokenValue(tokens: Tokens, name: string): string[] {
 	return (Array.isArray(v) ? v : [v]).filter((x) => x !== '');
 }
 
-/** Fill a template's tokens; several values are joined with `join`. */
+/** Fill a template's tokens; several values are joined with `join`; `{{a|b}}` takes the first token with a value. */
 export function fill(template: string, tokens: Tokens, formatDate: FormatDate, join = ', '): string {
-	return template.replace(TOKEN_RE, (whole, name: string, arg: string | undefined) => {
-		if (name === 'date') return arg ? formatDate(arg) : formatDate('YYYY-MM-DD');
-		if (!(name in tokens) && !TOKEN_NAMES.includes(name)) return whole;
-		return tokenValue(tokens, name).join(join);
+	return template.replace(TOKEN_RE, (whole, group: string, arg: string | undefined) => {
+		if (group === 'date') return arg ? formatDate(arg) : formatDate('YYYY-MM-DD');
+		const known = group.split('|').filter((n) => n in tokens || TOKEN_NAMES.includes(n));
+		if (!known.length) return whole;
+		for (const n of known) {
+			const vals = tokenValue(tokens, n);
+			if (vals.length) return vals.join(join);
+		}
+		return '';
 	});
 }
 
 /** Names a template uses that are not tokens (nor in `extra`): shown as a warning. */
 export function unknownTokens(template: string, extra: readonly string[] = []): string[] {
-	const out = new Set<string>();
-	for (const m of template.matchAll(/\{\{[#/^]?([A-Za-z]+)(?::[^}]*)?\}\}/g)) {
-		const name = m[1]!;
-		if (name !== 'date' && !TOKEN_NAMES.includes(name) && !extra.includes(name)) out.add(name);
-	}
-	return [...out];
+	return tokenNames(template).filter((n) => n !== 'date' && !TOKEN_NAMES.includes(n) && !extra.includes(n));
 }
 
 export function slug(text: string, max = 60): string {
@@ -96,6 +111,7 @@ export interface TokenSources {
 	model?: string;
 	audience?: string;
 	generated?: string;
+	pageCount?: number | null;
 	concepts?: { teaches: string[]; primed: string[]; assumed: string[]; known: string[] } | null;
 }
 
@@ -123,6 +139,8 @@ export function buildTokens(s: TokenSources): Tokens {
 		model: s.model ?? '',
 		audience: s.audience ?? '',
 		generated: s.generated ?? '',
+		pages: s.pageCount ? (s.pageCount === 1 ? '1' : `1–${s.pageCount}`) : '',
+		pageCount: s.pageCount ? String(s.pageCount) : '',
 		concepts: s.concepts?.teaches ?? [],
 		primedConcepts: s.concepts?.primed ?? [],
 		assumedConcepts: s.concepts?.assumed ?? [],

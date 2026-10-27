@@ -18,7 +18,7 @@ import { quietDelay, resolveFolder, resolveName } from './output.ts';
 import type { PaperIdentity } from './paperNote.ts';
 import { pathToFileUrl, type PaperMeta } from './sources.ts';
 import { renderBody, TEXTBOOK_TEMPLATE } from './template.ts';
-import { buildTokens, fill, type FormatDate, type Tokens } from './tokens.ts';
+import { buildTokens, fill, tokenNames, type FormatDate, type Tokens } from './tokens.ts';
 import type { ChapterParts, Estimate, GenerationOptions, PaperAnalysis, PaperRecord, Prerequisite } from './types.ts';
 import { usablePageLink } from './validate.ts';
 import { defuse, ensureFolder, normalizeFolder, uniquePath, writeChapter, type VaultLike, type WriteResult } from './writer.ts';
@@ -80,7 +80,7 @@ export interface OutputOptions {
 
 const PDF_LINK_BAD = /[[\]|#^\r\n]/;
 /** Tokens only the parts know: a folder or name template using one needs them even for the classic note. */
-const PARTS_TOKENS = ['title', 'doi', 'arxiv', 'paperNote', 'paperNoteFolder', 'provider', 'model', 'generated'];
+const PARTS_TOKENS = ['title', 'doi', 'arxiv', 'paperNote', 'paperNoteFolder', 'provider', 'model', 'generated', 'pages', 'pageCount'];
 
 const DEFAULT_ENV: NoteEnv = {
 	formatDate: () => new Date().toISOString().slice(0, 10),
@@ -91,7 +91,8 @@ const DEFAULT_ENV: NoteEnv = {
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const usesAny = (templates: string[], names: string[]) => templates.some((t) => names.some((n) => t.includes(`{{${n}}}`)));
+/** Whether a template uses any of the names, alone or in a fallback (`{{a|b}}`). */
+const usesAny = (templates: string[], names: string[]) => templates.some((t) => tokenNames(t).some((n) => names.includes(n)));
 
 export class ChapterRun {
 	paperId = '';
@@ -287,6 +288,7 @@ export class ChapterRun {
 			arxiv: who.arxiv ?? '',
 			paperNote,
 			provider: parts?.provider, model: parts?.model, audience: parts?.audience, generated: parts?.generated_at,
+			pageCount: parts?.paper.page_count ?? null,
 			concepts: review ? conceptLinks(rows, teaches, primed) : null,
 		});
 		// a token from the paper (its title, say) never brings a Templater tag in, whatever the Templater setting

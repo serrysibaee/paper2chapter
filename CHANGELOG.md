@@ -1,5 +1,20 @@
 # Changelog
 
+## Obsidian plugin 0.4.0 (unreleased)
+
+Three things a template could not say ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S4). Nothing a
+0.3.0 template writes changes, and the defaults still write the 0.1.1 note.
+
+### Added
+- **A line per value**: a section over a list token whose text uses `{{.}}` is written once per value, `{{.}}` being
+  the value (`{{#concepts}}` / `- [[{{.}}]]` / `{{/concepts}}` gives one linked line per concept), on lines of its own
+  or within a line. A value is written as it is, never filled as a template. A section without `{{.}}` shows or hides
+  as before, and the template check names a `{{.}}` outside a section over a list.
+- **`{{pages}}` and `{{pageCount}}`**: the paper's pages, `1–N` from its page count, and the count, in every template.
+  In a section heading, `{{pages}}` stays the pages the section cites.
+- **`{{a|b}}`**: the first of its tokens that has a value, in folders, names, properties and notes
+  (`{{paperNote|paperTitle}} - Chapter`). Each name in it is checked as it is typed.
+
 ## Obsidian plugin 0.3.0 (2026-10-27, released)
 
 The third step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S3). The defaults

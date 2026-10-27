@@ -10,7 +10,7 @@
  * `{{#name}} … {{/name}}` keeps what it encloses only when that piece or token is not empty, on lines of their own
  * or within a line. A template's own frontmatter is not used: a note's properties come from the Properties settings.
  */
-import { fill, tokenValue, type FormatDate, type Tokens } from './tokens.ts';
+import { fill, LIST_TOKENS, tokenNames as namesIn, tokenValue, type FormatDate, type Tokens } from './tokens.ts';
 import type { ChapterParts, SectionPart } from './types.ts';
 import { defuse } from './writer.ts';
 
@@ -172,41 +172,90 @@ export function stripFrontmatter(template: string): { body: string; had: boolean
 
 type Item = { text: string; fromTemplate: boolean } | { piece: string; prefix: string };
 
+/** The item of a section over a list (N13). */
+const DOT = '{{.}}';
+const MARKER = /^[ \t]*\{\{([#/])([A-Za-z]+)\}\}[ \t]*$/;
+/**
+ * Where a value written for `{{.}}` waits until the line's tokens are filled, so the value is never filled itself: a
+ * number between two private-use characters, which no template holds.
+ */
+const SLOT_MARK = '';
+const SLOT = /(\d+)/g;
+
+/** The line of the `{{/name}}` that closes the section opened at `at`, or the end. */
+function closing(lines: string[], at: number, name: string): number {
+	let depth = 0;
+	for (let i = at + 1; i < lines.length; i++) {
+		const m = lines[i]!.match(MARKER);
+		if (!m || m[2] !== name) continue;
+		if (m[1] === '#') depth++;
+		else if (depth === 0) return i;
+		else depth--;
+	}
+	return lines.length;
+}
+
 /**
  * The note's body: the template with its pieces placed and its tokens filled. Every piece is defused once more as
- * it goes in (the backend made it inert already); the template's own text is left as written, for Templater.
+ * it goes in (the backend made it inert already); the template's own text is left as written, for Templater. A
+ * section over a list token whose text uses `{{.}}` is written once per value (N13); any other section shows or
+ * hides.
  */
 export function renderBody(template: string, p: ChapterParts, opts: FormatOptions, tokens: Tokens, formatDate: FormatDate,
 	extra: ExtraPieces = {}): string {
 	const raw: Record<string, string> = { ...fragments(p, opts, tokens, formatDate), progress: extra.progress ?? '', flashcards: extra.flashcards ?? '' };
 	const pieces = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, defuse(v)]));
 	const has = (name: string) => (name in pieces ? pieces[name] !== '' : tokenValue(tokens, name).length > 0);
+	const isList = (name: string) => !(name in pieces) && Array.isArray(tokens[name]);
+	const values: string[] = [];
+	const slot = (v: string) => `${SLOT_MARK}${values.push(v) - 1}${SLOT_MARK}`;
+	/** `{{#name}}…{{.}}…{{/name}}` within a line, over a list: its text once per value. */
+	const inlineLists = (line: string) => line.replace(/\{\{#([A-Za-z]+)\}\}([^\n]*?)\{\{\/\1\}\}/g, (whole, name: string, inner: string) =>
+		(isList(name) && inner.includes(DOT) ? tokenValue(tokens, name).map((v) => inner.split(DOT).join(slot(v))).join('') : whole));
 	const items: Item[] = [];
-	const stack: { name: string; keep: boolean }[] = [];
-	const keeping = () => stack.every((s) => s.keep);
-	const src = stripFrontmatter(template.replace(/\r\n/g, '\n')).body;
-	for (const raw of src.split('\n')) {
-		const marker = raw.match(/^[ \t]*\{\{([#/])([A-Za-z]+)\}\}[ \t]*$/);
-		if (marker) {
-			if (marker[1] === '#') stack.push({ name: marker[2]!, keep: keeping() && has(marker[2]!) });
-			else if (stack.length && stack[stack.length - 1]!.name === marker[2]) stack.pop();
-			continue;
+
+	const walk = (lines: string[], dot: string | null) => {
+		const stack: { name: string; keep: boolean }[] = [];
+		const keeping = () => stack.every((s) => s.keep);
+		for (let i = 0; i < lines.length; i++) {
+			const raw = lines[i]!;
+			const marker = raw.match(MARKER);
+			if (marker) {
+				const name = marker[2]!;
+				if (marker[1] === '#') {
+					if (keeping() && isList(name)) {
+						const end = closing(lines, i, name);
+						const body = lines.slice(i + 1, end);
+						if (body.some((l) => l.includes(DOT))) {
+							for (const v of tokenValue(tokens, name)) walk(body, slot(v));
+							i = end; // the closing marker is taken with its section
+							continue;
+						}
+					}
+					stack.push({ name, keep: keeping() && has(name) });
+				} else if (stack.length && stack[stack.length - 1]!.name === name) stack.pop();
+				continue;
+			}
+			if (!keeping()) continue;
+			let line = inlineLists(raw);
+			if (dot !== null) line = line.split(DOT).join(dot);
+			line = inlineBlocks(line, has);
+			const alone = line.match(/^((?:>[ \t]?)*)[ \t]*\{\{([A-Za-z]+)\}\}[ \t]*$/);
+			if (alone && alone[2]! in pieces) {
+				if (pieces[alone[2]!]) items.push({ piece: pieces[alone[2]!]!, prefix: alone[1]! });
+				continue; // an empty piece takes its line with it
+			}
+			// pieces within a line of text; tokens are filled in the template's own text only
+			const text = line.split(/(\{\{[A-Za-z]+\}\})/).map((seg) => {
+				const name = seg.match(/^\{\{([A-Za-z]+)\}\}$/)?.[1];
+				if (name && name in pieces) return pieces[name]!;
+				return fill(seg, tokens, formatDate);
+			}).join('');
+			items.push({ text: text.replace(SLOT, (_m, n: string) => values[Number(n)] ?? ''), fromTemplate: true });
 		}
-		if (!keeping()) continue;
-		const line = inlineBlocks(raw, has);
-		const alone = line.match(/^((?:>[ \t]?)*)[ \t]*\{\{([A-Za-z]+)\}\}[ \t]*$/);
-		if (alone && alone[2]! in pieces) {
-			if (pieces[alone[2]!]) items.push({ piece: pieces[alone[2]!]!, prefix: alone[1]! });
-			continue; // an empty piece takes its line with it
-		}
-		// pieces within a line of text; tokens are filled in the template's own text only
-		const text = line.split(/(\{\{[A-Za-z]+\}\})/).map((seg) => {
-			const name = seg.match(/^\{\{([A-Za-z]+)\}\}$/)?.[1];
-			if (name && name in pieces) return pieces[name]!;
-			return fill(seg, tokens, formatDate);
-		}).join('');
-		items.push({ text, fromTemplate: true });
-	}
+	};
+	walk(stripFrontmatter(template.replace(/\r\n/g, '\n')).body.split('\n'), null);
+
 	// the template's own blank lines: at most one in a row, none at the start or the end
 	const out: string[] = [];
 	let blank = true;
@@ -325,18 +374,21 @@ export const TEXTBOOK_TEMPLATE = `# {{title}}
 export function templateProblems(template: string, tokenNames: readonly string[]): string[] {
 	const problems: string[] = [];
 	const known = new Set([...FRAGMENTS, ...tokenNames, ...SECTION_TOKENS, 'date']);
-	const unknown = new Set<string>();
-	for (const m of template.matchAll(/\{\{[#/]?([A-Za-z]+)(?::[^}]*)?\}\}/g)) {
-		if (!known.has(m[1]!)) unknown.add(m[1]!);
-	}
-	if (unknown.size) problems.push(`Unknown names: ${[...unknown].map((n) => `{{${n}}}`).join(', ')}.`);
+	const unknown = namesIn(template).filter((n) => !known.has(n));
+	if (unknown.length) problems.push(`Unknown names: ${unknown.map((n) => `{{${n}}}`).join(', ')}.`);
 	const open: string[] = [];
-	for (const m of template.matchAll(/\{\{([#/])([A-Za-z]+)\}\}/g)) {
+	let dotOutside = false;
+	for (const m of template.matchAll(/\{\{(?:([#/])([A-Za-z]+)|(\.))\}\}/g)) {
+		if (m[3]) {
+			if (!LIST_TOKENS.includes(open[open.length - 1] ?? '')) dotOutside = true;
+			continue;
+		}
 		if (m[1] === '#') open.push(m[2]!);
 		else if (open[open.length - 1] === m[2]) open.pop();
 		else problems.push(`{{/${m[2]}}} closes a block that is not open.`);
 	}
 	if (open.length) problems.push(`Not closed: ${open.map((n) => `{{#${n}}}`).join(', ')}.`);
+	if (dotOutside) problems.push(`{{.}} is filled only inside a section over a list, such as {{#concepts}} … {{/concepts}}: ${LIST_TOKENS.join(', ')}.`);
 	if (stripFrontmatter(template).had) problems.push("The template's frontmatter is not used: set the note's properties under Properties.");
 	return problems;
 }

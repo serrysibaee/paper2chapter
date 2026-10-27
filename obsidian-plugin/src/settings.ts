@@ -227,7 +227,7 @@ export class P2CSettingTab extends PluginSettingTab {
 						desc: 'Where chapter notes are created. Tokens such as {{year}} or {{paperNoteFolder}} can be part of it.',
 						control: { type: 'folder', key: 'outputFolder', placeholder: DEFAULT_SETTINGS.outputFolder, includeRoot: true, validate: (v) => checkFolderTemplate(v) },
 					},
-					{ name: 'Note name', desc: 'A template: {{paperTitle}}, or {{firstAuthor}} {{year}} - {{paperTitle}}, for example.', control: { type: 'text', key: 'noteName', placeholder: DEFAULT_SETTINGS.noteName, validate: (v) => checkNameTemplate(v) } },
+					{ name: 'Note name', desc: 'A template: {{paperTitle}}, {{firstAuthor}} {{year}} - {{paperTitle}}, or {{paperNote|paperTitle}} - Chapter (the first with a value), for example.', control: { type: 'text', key: 'noteName', placeholder: DEFAULT_SETTINGS.noteName, validate: (v) => checkNameTemplate(v) } },
 					{ name: 'Tokens', searchable: false, render: (setting) => { setting.setName(''); helpList(setting.descEl, 'Tokens you can use', TOKEN_HELP); } },
 					{
 						name: 'Figures',
@@ -258,7 +258,7 @@ export class P2CSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Template note',
-						desc: 'A note with placeholders for the pieces of the chapter, and tokens. Its own frontmatter is not used: set properties below.',
+						desc: 'A note with placeholders for the pieces of the chapter, and tokens. {{#concepts}} … {{.}} … {{/concepts}} writes its text once per concept (any list token); {{a|b}} is the first token with a value. Its own frontmatter is not used: set properties below.',
 						visible: () => this.s.layout === 'template',
 						control: { type: 'file', key: 'templatePath', filter: (f) => f.extension === 'md', validate: (v) => this.checkTemplatePath(v) },
 					},

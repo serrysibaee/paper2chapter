@@ -25,6 +25,9 @@ setting**, so the plugin fits a vault instead of a vault fitting the plugin, and
 | N10 | The Knowledge OS is used only through an API its plugin publishes (`api.version` ≥ 1, `status(names)`), and its block names the two properties it reads. Without that API nothing is asked and no block is written; the API and the block's renderer are the Knowledge OS's own work, in its repository. | A vault without it, or with an older version, never shows a raw code block or a broken call. |
 | N11 | A batch is not reviewed: each paper is generated with what the rules, the Knowledge OS or Dataview say is known, and a prerequisite links to a note only when its name fits one. | A queue that waits for the reader at every paper is no batch; the single-paper window stays the place to confirm. |
 | N12 | Unmatched prerequisites (a line in a note, or stub notes) are left for later. | Not asked for in this phase; a vault can read them from the manifest. |
+| N13 | A section over a list token whose text uses `{{.}}` is written once per value (`{{#concepts}}` / `- [[{{.}}]]` / `{{/concepts}}`); a section without `{{.}}` shows or hides as before. | A template could not write one linked line per concept (a list token fills a line joined by commas). Mustache's own form, and no template written for 0.2 or 0.3 changes. |
+| N14 | `{{pages}}` is the paper's pages, `1–N` from its page count, and `{{pageCount}}` the count; both empty when the backend does not know it. | A chapter property `pages:` could not be set. The en dash is how page ranges are written in notes. |
+| N15 | `{{a\|b}}` fills the first of its tokens that has a value, in every template: folders, names, properties and the note. | A name like `{{paperNote}} - Chapter` came out ` - Chapter` when the paper has no note; a fallback needs no new block syntax. |
 
 ## Phases (one pull request each)
 
@@ -80,6 +83,19 @@ vault in memory, so what it shows is what a chapter gets.
 - [x] Tag `0.3.0` (go-ahead given 2026-10-27): https://github.com/serrysibaee/paper2chapter/releases/tag/0.3.0,
       marked Latest; `main.js`, `manifest.json` and `styles.css` byte-identical to a local build.
 
+### S4. Templates: one line per value, pages, fallbacks
+
+Found while fitting a vault's chapter template to its own note checker (2026-10-27): three things a template could
+not say.
+
+- [x] Sections over a list token written once per value with `{{.}}` (N13), inline too
+      (`{{#authors}}{{.}}; {{/authors}}`); a value is never filled again as a template; the template check names a
+      `{{.}}` outside such a section.
+- [x] `{{pages}}` and `{{pageCount}}` from the paper's page count (N14), in names and folders as in properties and notes.
+- [x] `{{a|b}}`, the first token with a value (N15), in every template, with the checks and the token-use test
+      (`usesAny`) reading each name in it.
+- [x] `docs/OBSIDIAN.md` documents all three.
+
 ## Results log
 
 | Date | What | Result |
@@ -96,3 +112,4 @@ vault in memory, so what it shows is what a chapter gets.
 | 2026-10-27 | Live in Obsidian 1.15.0 (scratch vault, 0.2.0's saved settings; Note Relatives and Dataview enabled, Knowledge OS 1.0.0 installed and off, Templater and Spaced Repetition absent) | settings migrated to version 3; the one-time notice named only the two absent plugins; the new groups and their checks (rules, property names, command ids, a bad value not saved); each integration row's state, *Get it* opening Templater's community page, Note Relatives' missing-row warning and *Open its settings*; the preview with both concept properties and the nav block; the review window on the real paper (one match ticked by Dataview, two candidates, no match, *Another note…*, *What does it teach?* add and remove) with no model call; an import writing both properties, the nav block, flashcards and a 23-exercise manifest, the command after writing run; the batch skipping a paper whose note is there, and writing the backend's chapter (not generating) when it is not |
 | 2026-10-27 | Found live, fixed | a ready row said "X is on" beside its own switch, off (now "installed and enabled"); a note the reader picks was not judged as a match is (now `repick`: ticked with its reason unless the reader set the tick); a multiple-choice card repeated its answer, and a coding card lacked its solution; an imported chapter (and the batch writing one the backend had) gave today's reasons for the ticks it was generated with (now `known_by: generation`). Plugin 117 passed |
 | 2026-10-27 | Release 0.3.0 | pull request 3 merged by rebase; tag `0.3.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |
+| 2026-10-27 | Plugin after S4 | 122 passed (117 before), lint 0 errors 0 warnings, tsc clean; backend 142 passed, 1 skipped (unchanged). A vault's chapter template using all three, rendered by this code on the sample chapter, passes that vault's own note checker with no error and no miss (on 0.3.0: two misses, and ` - Chapter` as the name of a paper without a note) |

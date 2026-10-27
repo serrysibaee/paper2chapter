@@ -55,6 +55,27 @@ test('blocks keep what they enclose only when it is not empty', () => {
 	assert.ok(withDoi.endsWith('\nA doi:10.1/x B\n'));
 });
 
+test('a section over a list with {{.}} is written once per value; without {{.}} it only shows or hides', () => {
+	const t = '## Concepts\n\n{{#concepts}}\n- [[{{.}}]] ({{year}})\n{{/concepts}}\n\nBy{{#authors}} {{.}};{{/authors}} end\n'
+		+ '{{#concepts}}\nIt teaches something.\n{{/concepts}}\n';
+	const two = { ...tokens, concepts: ['Softmax', 'Weighted average'], authors: ['A. One', 'B. Two'] };
+	const out = renderBody(t, P, OPTS, two, fd);
+	assert.ok(out.startsWith('## Concepts\n\n- [[Softmax]] (2020)\n- [[Weighted average]] (2020)\n\nBy A. One; B. Two; end\n'));
+	assert.equal(out.split('It teaches something.').length, 2, 'a section without {{.}} is written once');
+	const none = renderBody(t, P, OPTS, { ...tokens, concepts: [], authors: [] }, fd);
+	assert.equal(none, '## Concepts\n\nBy end\n', 'no values, no lines');
+	const evil = renderBody('{{#concepts}}\n- [[{{.}}]]\n{{/concepts}}\n', P, OPTS, { ...tokens, concepts: ['{{title}}', '{{date:YYYY}}'] }, fd);
+	assert.equal(evil, '- [[{{title}}]]\n- [[{{date:YYYY}}]]\n', 'a value is never filled again');
+});
+
+test('a {{.}} outside a section over a list is named', () => {
+	assert.ok(templateProblems('- [[{{.}}]]', TOKEN_NAMES).some((x) => x.includes('{{.}}')));
+	assert.ok(templateProblems('{{#summary}}\n{{.}}\n{{/summary}}', TOKEN_NAMES).some((x) => x.includes('{{.}}')));
+	assert.deepEqual(templateProblems('{{#concepts}}\n- [[{{.}}]]\n{{/concepts}}', TOKEN_NAMES), []);
+	assert.deepEqual(templateProblems('# {{paperNote|paperTitle}} - Chapter', TOKEN_NAMES), []);
+	assert.ok(templateProblems('# {{paperNote|papr}}', TOKEN_NAMES).some((x) => x.includes('{{papr}}')));
+});
+
 test('tokens fill the template, never the text of a piece', () => {
 	const evil: ChapterParts = { ...P, summary: 'Use {{title}} and {{date:YYYY}} here.' };
 	const out = renderBody('# {{title}} ({{year}}, {{date:YYYY-MM-DD}})\n\n{{summary}}\n', evil, OPTS, tokens, fd);
