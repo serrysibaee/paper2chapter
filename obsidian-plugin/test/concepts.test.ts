@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-	ConceptIndex, conceptKey, conceptLinks, isConceptNote, knownFor, parseRules, suggestReview, teachSuggestions,
-	type ConceptNote,
+	ConceptIndex, conceptKey, conceptLinks, isConceptNote, knownFor, parseRules, repick, reviewFor, suggestReview, teachSuggestions,
+	type ConceptNote, type KosStatus,
 } from '../src/concepts.ts';
 import type { Prerequisite } from '../src/types.ts';
 
@@ -92,6 +92,34 @@ test('the review without concept notes: the Knowledge OS by name, or nothing pre
 		notes: () => [], rules: [], knowledge: async () => ({ Softmax: { state: 'passed', stands: true } }),
 	});
 	assert.deepEqual([rows[0]!.note, rows[0]!.known, rows[0]!.suggested], [null, true, { by: 'knowledge-os', state: 'passed' }]);
+});
+
+test('a note the reader picks is judged as a match would be; a tick the reader set stays', async () => {
+	const env = { notes: () => NOTES.slice(0, 4), rules: parseRules('axiom: true').rules, dataview: () => new Set([NOTES[2]!.path]) };
+	const { rows, sources } = await reviewFor([prereq('exp', 'Exponential function and its properties'), prereq('s', 'Softmax things')], env);
+	assert.equal(rows[0]!.note?.path ?? 'none', 'none', 'its name fits no note');
+	await repick(rows[0]!, NOTES[1]!, sources, env); // Dot product: an axiom
+	assert.deepEqual([rows[0]!.note?.basename, rows[0]!.known, rows[0]!.suggested], ['Dot product', true, { by: 'rule', rule: 'axiom: true' }]);
+	await repick(rows[0]!, null, sources, env);
+	assert.deepEqual([rows[0]!.known, rows[0]!.suggested], [false, null], 'no note: no reason to tick it');
+	rows[1]!.known = true;
+	rows[1]!.touched = true; // the reader ticked it
+	await repick(rows[1]!, NOTES[3]!, sources, env); // a note nothing marks as known
+	assert.equal(rows[1]!.known, true, 'the reader\'s tick stays');
+	await repick(rows[1]!, NOTES[2]!, sources, env);
+	assert.deepEqual(rows[1]!.note?.basename, 'Softmax');
+});
+
+test('a picked note the Knowledge OS was not asked about is asked then', async () => {
+	const asked: string[][] = [];
+	const env = { notes: () => NOTES.slice(0, 4), rules: [], knowledge: async (names: string[]): Promise<Record<string, KosStatus>> => {
+		asked.push(names);
+		return names.includes('Softmax') ? { Softmax: { state: 'passed', stands: true } } : {};
+	} };
+	const { rows, sources } = await reviewFor([prereq('x', 'Something unmatched')], env);
+	await repick(rows[0]!, NOTES[2]!, sources, env);
+	assert.deepEqual(asked, [['Something unmatched'], ['Softmax']]);
+	assert.deepEqual(rows[0]!.suggested, { by: 'knowledge-os', state: 'passed' });
 });
 
 test('what it teaches: the concept the paper is named for, in its title or before its colon', () => {

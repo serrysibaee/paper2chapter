@@ -344,7 +344,8 @@ export default class Paper2ChapterPlugin extends Plugin {
 		if (this.app.vault.getAbstractFileByPath(normalizePath(planned))) return { status: 'skipped', note: planned, message: `${planned} is there already` };
 		const env = this.reviewEnv();
 		let known: string[] = [];
-		if (env && run.analysis) {
+		// a chapter the backend has is written as an import: what was known is what it was generated with
+		if (env && run.analysis && !run.hasChapter) {
 			const rows = await suggestReview(run.analysis.prerequisites, env);
 			const teaches = this.settings.matchConcepts ? teachSuggestions(run.analysis.title, new ConceptIndex(env.notes())) : [];
 			run.review = { rows, teaches };

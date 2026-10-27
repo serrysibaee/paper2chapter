@@ -131,12 +131,16 @@ export class ConceptIndex {
 	}
 }
 
-/** Why a concept was pre-ticked as known; null: it was not. */
+/**
+ * Why a concept was pre-ticked as known; null: it was not. `generation`: a chapter written without a review (an
+ * import, or the batch writing a chapter the backend had) knows only that it was known when it was generated.
+ */
 export type KnownBy =
 	| { by: 'rule'; rule: string }
 	| { by: 'knowledge-os'; state: string }
 	| { by: 'dataview' }
 	| { by: 'reader' }
+	| { by: 'generation' }
 	| null;
 
 export interface KosStatus {
@@ -166,6 +170,7 @@ export function knownText(k: KnownBy): string {
 	if (k.by === 'rule') return `known by the rule ${k.rule}`;
 	if (k.by === 'knowledge-os') return `the Knowledge OS: ${k.state}`;
 	if (k.by === 'dataview') return 'known by the Dataview source';
+	if (k.by === 'generation') return 'known when the chapter was generated';
 	return 'ticked by you';
 }
 
@@ -178,6 +183,7 @@ export interface ReviewRow {
 	note: ConceptNote | null; // the reader's pick: the one candidate by default, none when two fit
 	known: boolean; // ticked
 	suggested: KnownBy; // why it was pre-ticked
+	touched?: boolean; // the reader set the tick: picking another note leaves it
 }
 
 export interface ReviewEnv {
@@ -187,24 +193,51 @@ export interface ReviewEnv {
 	dataview?: () => Set<string> | null;
 }
 
-/** Each prerequisite with its match and its known state, ready for the reader to confirm or change. */
-export async function suggestReview(prereqs: Prerequisite[], env: ReviewEnv): Promise<ReviewRow[]> {
+/**
+ * Each prerequisite with its match and its known state, ready for the reader to confirm or change, and the sources
+ * that decided it, so a note the reader picks later is judged the same way.
+ */
+export async function reviewFor(prereqs: Prerequisite[], env: ReviewEnv): Promise<{ rows: ReviewRow[]; sources: KnownSources }> {
 	const index = new ConceptIndex(env.notes());
-	const rows = prereqs.map((p) => {
+	const found = prereqs.map((p) => {
 		const candidates = index.find(p.name);
 		return { p, candidates, note: candidates.length === 1 ? candidates[0]! : null };
 	});
 	let kos: Record<string, KosStatus> | null = null;
 	if (env.knowledge) {
-		const names = [...new Set(rows.map((r) => r.note?.basename ?? r.p.name))];
+		const names = [...new Set(found.map((r) => r.note?.basename ?? r.p.name))];
 		try { kos = await env.knowledge(names); } catch { kos = null; }
 	}
 	let dataview: Set<string> | null = null;
 	try { dataview = env.dataview?.() ?? null; } catch { dataview = null; }
-	return rows.map(({ p, candidates, note }) => {
-		const suggested = knownFor(note, p.name, { rules: env.rules, kos, dataview });
+	const sources: KnownSources = { rules: env.rules, kos, dataview };
+	const rows = found.map(({ p, candidates, note }) => {
+		const suggested = knownFor(note, p.name, sources);
 		return { id: p.id, name: p.name, level: p.level, why: p.why_needed, candidates, note, known: !!suggested, suggested };
 	});
+	return { rows, sources };
+}
+
+export async function suggestReview(prereqs: Prerequisite[], env: ReviewEnv): Promise<ReviewRow[]> {
+	return (await reviewFor(prereqs, env)).rows;
+}
+
+/**
+ * The reader picks another note for a prerequisite (or none): it is judged as a match would be, its known state
+ * suggested with its reason, unless the reader set the tick already. The Knowledge OS is asked about a note it was
+ * not asked about before.
+ */
+export async function repick(row: ReviewRow, note: ConceptNote | null, sources: KnownSources, env?: ReviewEnv): Promise<void> {
+	row.note = note;
+	if (note && env?.knowledge && !(sources.kos && note.basename in sources.kos)) {
+		try {
+			const more = await env.knowledge([note.basename]);
+			if (more && Object.keys(more).length) sources.kos = { ...(sources.kos ?? {}), ...more };
+		} catch { /* the rules decide */ }
+	}
+	if (row.touched) return;
+	row.suggested = knownFor(note, row.name, sources);
+	row.known = !!row.suggested;
 }
 
 /** The concept a paper is named for: its title, or the part before a colon or a dash. */

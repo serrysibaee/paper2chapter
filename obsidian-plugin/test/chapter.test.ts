@@ -141,6 +141,29 @@ test('the manifest is written beside the note\'s choices, never over another, an
 	assert.equal(skip.manifestPath, undefined);
 });
 
+test('a chapter written without a review (an import) says what was known when it was generated, not why today', async () => {
+	const t = setup();
+	const res = await t.write({ matchConcepts: true, manifest: true, manifestPath: 'Data/{{paperSlug}}.json' });
+	const m = JSON.parse(t.vault.text(res.manifestPath!)) as Manifest;
+	const exp = m.prerequisites.find((p) => p.id === 'exponential-function')!;
+	assert.deepEqual([exp.known, exp.known_by, exp.reason, exp.suggested], [true, 'generation', 'known when the chapter was generated', false]);
+	const other = m.prerequisites.find((p) => p.id === 'weighted-averages')!;
+	assert.deepEqual([other.known, other.known_by, other.suggested], [false, null, false]);
+	const off = setup();
+	const res2 = await off.write({ manifest: true, manifestPath: 'Data/{{paperSlug}}.json' });
+	const m2 = JSON.parse(off.vault.text(res2.manifestPath!)) as Manifest;
+	assert.equal(m2.prerequisites.find((p) => p.id === 'exponential-function')!.known_by, 'generation', 'without matching too');
+});
+
+test('a chapter written from the reader\'s review keeps its reasons', async () => {
+	const t = setup();
+	t.run.review = { rows: [{ id: 'exponential-function', name: 'The exponential function', level: '', why: '', candidates: [],
+		note: NOTES[0]!, known: true, suggested: { by: 'rule', rule: 'axiom: true' } }], teaches: [] };
+	const res = await t.write({ matchConcepts: true, manifest: true, manifestPath: 'Data/{{paperSlug}}.json' });
+	const m = JSON.parse(t.vault.text(res.manifestPath!)) as Manifest;
+	assert.deepEqual([m.prerequisites[0]!.known_by, m.prerequisites[0]!.reason], ['rule', 'known by the rule axiom: true']);
+});
+
 test('Templater: off, the template\'s own tags are defused; on, they stay, and text from the paper is still defused', async () => {
 	const tpl = '# {{title}}\n\nMade <% tp.date.now() %>\n\n{{summary}}\n';
 	const parts = { ...SAMPLE.parts, summary: 'Model text <% tp.file.delete() %>' };

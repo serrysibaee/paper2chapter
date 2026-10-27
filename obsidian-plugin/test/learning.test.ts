@@ -24,6 +24,19 @@ test('flashcards in Spaced Repetition syntax: the deck tag, then each card as it
 	assert.match(mc[1]!, /^\*\*B\.\*\* /, 'and its answer names the right one first');
 });
 
+test('a card says its answer once, and a coding card carries its solution', () => {
+	const mc = EXS.find((e) => e.kind === 'multiple_choice')!;
+	const right = mc.choices[mc.correct_choice!]!;
+	const card = flashcards([{ ...mc, answer: `${right}.` }], { mode: 'spaced-repetition', tag: '', template: '' });
+	const answer = card.split('\n?\n')[1]!.split('\n');
+	assert.equal(answer[0], `**${String.fromCharCode(65 + mc.correct_choice!)}.** ${right}`);
+	assert.ok(!answer.some((l) => l.trim() === right || l.trim() === `${right}.`), 'the right option, not the same answer again');
+	const py = EXS.find((e) => e.kind === 'python')!;
+	assert.ok(py.solution_code);
+	const pyCard = flashcards([py], { mode: 'spaced-repetition', tag: '', template: '' });
+	assert.ok(pyCard.includes('```python\n') && pyCard.includes(py.solution_code.split('\n').find((l) => l.trim())!), pyCard);
+});
+
 test('flashcards from a line template, or none', () => {
 	const p1 = EXS.find((e) => e.id === 'p1')!;
 	assert.equal(flashcards([p1], { mode: 'custom', tag: '', template: 'Q: {{question}} ({{kind}})\nA: {{answer}}' }),
