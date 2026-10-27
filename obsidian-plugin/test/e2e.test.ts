@@ -88,6 +88,25 @@ test('a PDF becomes a chapter note through the real backend', { skip: !ready && 
 		assert.ok(md2.includes('## Intuition first') && md2.includes('## Practice problems') && md2.includes('[!success]- Solution'));
 		assert.ok(md2.includes('[[Papers/sample.pdf#page=') || md2.includes('p. '), 'page citations');
 		assert.ok(res2.assetPaths.length === 1 && md2.includes(`![[${res2.assetPaths[0]!.split('/').pop()!}]]`));
+
+		// concepts matched to notes, both integrations, flashcards and the manifest, on the backend's exercises
+		const first = analysis.prerequisites[0]!;
+		const notes = [{ path: `Concepts/${first.name}.md`, basename: first.name, linktext: first.name, frontmatter: { axiom: true }, tags: [] }];
+		const plugins = (id: string) => (id === 'knowledge-os'
+			? { installed: true, enabled: true, instance: { api: { version: 1, status: async () => ({}) } } }
+			: id === 'note-relatives' ? { installed: true, enabled: true, instance: { settings: { blockName: 'nav' } } }
+				: { installed: false, enabled: false });
+		const env3 = { ...env, review: { notes: () => notes, rules: [{ kind: 'property' as const, key: 'axiom', values: ['true'] }] }, plugins };
+		const note3 = { ...DEFAULT_SETTINGS, matchConcepts: true, knowledgeOs: true, noteRelatives: true, flashcards: 'spaced-repetition' as const,
+			manifest: true, manifestPath: 'Data/{{paperSlug}}.json', noteName: '{{paperTitle}} - concepts' };
+		const res3 = await run.write({ folder: '', attachments: '', solutions: true, note: note3, env: env3 }, () => {});
+		const md3 = vault.text(res3.notePath);
+		assert.ok(md3.includes(`prerequisites:\n  - "[[${first.name}]]"\n---\n\`\`\`nav\n\`\`\`\n\n\`\`\`knowledge-os\nprogress\n`), md3.slice(0, 900));
+		assert.ok(md3.includes('\n## Flashcards\n\n#flashcards\n\n'));
+		const manifest = JSON.parse(vault.text(res3.manifestPath!)) as { note: string; exercises: unknown[]; prerequisites: { id: string; note: string | null; known: boolean }[] };
+		assert.equal(manifest.note, res3.notePath);
+		assert.ok(manifest.exercises.length >= 3, 'the backend gives every exercise as data');
+		assert.deepEqual(manifest.prerequisites[0], { ...manifest.prerequisites[0], id: first.id, note: `Concepts/${first.name}.md`, known: true });
 	} finally {
 		backend.stop();
 	}

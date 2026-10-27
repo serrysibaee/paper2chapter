@@ -45,6 +45,9 @@ export function renderProperties(rows: PropertyRow[], tokens: Tokens, formatDate
 				if (vals.length === 1) out.push(`${k}: ${q(asLink(vals[0]!))}`);
 				else out.push(`${k}:`, ...vals.map((v) => `  - ${q(asLink(v))}`));
 				break;
+			case 'links': // a list of links, even with one value
+				out.push(`${k}:`, ...vals.map((v) => `  - ${q(asLink(v))}`));
+				break;
 			case 'number': {
 				const n = Number(vals.join(' ').replace(/,/g, ''));
 				if (Number.isFinite(n)) out.push(`${k}: ${n}`);

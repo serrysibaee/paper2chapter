@@ -1,13 +1,18 @@
 import { App, Modal, Notice, PluginSettingTab, Setting, type SettingDefinitionItem, TFile } from 'obsidian';
 import {
-	CHAPTER_ROWS, DEFAULT_SETTINGS, exportProfile, importProfile, lines, type P2CSettings, type PropertyRow, type PropertyType,
+	CHAPTER_ROWS, conceptRows, DEFAULT_SETTINGS, exportProfile, importProfile, lines, MACHINE_KEYS, type P2CSettings,
+	type PropertyRow, type PropertyType,
 } from './config.ts';
+import {
+	getItUrl, INTEGRATIONS, integrationState, nrMissing, nrSettings, type IntegrationSpec,
+} from './integrations.ts';
 import type Paper2ChapterPlugin from './main.ts';
 import { FRAGMENT_HELP } from './template.ts';
 import { TOKEN_HELP } from './tokens.ts';
 import type { AppSettings, Audience, Effort, Selection } from './types.ts';
 import {
-	checkFolders, checkFolderTemplate, checkNameTemplate, checkPageLinkTemplate, checkQuietHours, checkRows,
+	checkCommands, checkFlashcardTag, checkFlashcardTemplate, checkFolders, checkFolderTemplate, checkManifestPath,
+	checkNameTemplate, checkPageLinkTemplate, checkPropertyName, checkQuietHours, checkRows, checkRulesText,
 	checkSectionHeading, checkTemplateText, checkUrl,
 } from './validate.ts';
 
@@ -15,7 +20,7 @@ export { DEFAULT_SETTINGS } from './config.ts';
 export type { P2CSettings } from './config.ts';
 
 const PROPERTY_TYPES: Record<PropertyType, string> = {
-	text: 'Text', list: 'List', link: 'Link', number: 'Number', date: 'Date', checkbox: 'Checkbox',
+	text: 'Text', list: 'List', link: 'Link', links: 'Links (a list)', number: 'Number', date: 'Date', checkbox: 'Checkbox',
 };
 
 export const AUDIENCES: Record<Audience, string> = {
@@ -39,8 +44,13 @@ export function modelLabel(m: AppSettings['providers'][number]['models'][number]
 
 /** Text settings stored trimmed; an empty value falls back to the default where one is required. */
 const TRIMMED = new Set(['backendUrl', 'backendDir', 'pythonPath', 'outputFolder', 'attachments', 'noteName', 'figuresFolder',
-	'quietHours', 'templatePath', 'pageLinkTemplate', 'zoteroUrl', 'sectionHeading']);
-const REQUIRED = new Set(['backendUrl', 'attachments', 'noteName', 'zoteroUrl', 'sectionHeading']);
+	'quietHours', 'templatePath', 'pageLinkTemplate', 'zoteroUrl', 'sectionHeading', 'teachesKey', 'prerequisitesKey',
+	'manifestPath', 'flashcardTag', 'dataviewSource']);
+const REQUIRED = new Set(['backendUrl', 'attachments', 'noteName', 'zoteroUrl', 'sectionHeading', 'teachesKey',
+	'prerequisitesKey', 'manifestPath']);
+/** Settings that show or hide other rows. */
+const SHAPING = new Set(['zotero', 'figures', 'layout', 'pageLinks', 'propertiesMode', 'paperNoteKeys', 'matchConcepts',
+	'dataview', 'flashcards', 'manifest']);
 const NUMBERS = new Set(['headingLevel']);
 
 /** A short explanation of every token, for the settings. */
@@ -87,7 +97,7 @@ export class P2CSettingTab extends PluginSettingTab {
 		if (key === 'backendUrl') this.plugin.resetClient();
 		await this.plugin.saveSettings();
 		// rows that show or hide with this choice
-		if (['zotero', 'figures', 'layout', 'pageLinks', 'propertiesMode', 'paperNoteKeys'].includes(key)) this.update();
+		if (SHAPING.has(key)) this.update();
 	}
 
 	private get s(): P2CSettings {
@@ -168,6 +178,44 @@ export class P2CSettingTab extends PluginSettingTab {
 						visible: () => lines(this.s.paperNoteKeys).length > 0,
 						control: { type: 'textarea', key: 'paperNoteFolders', rows: 2 },
 					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Prerequisites and concepts',
+				items: [
+					{
+						name: 'Match concept notes',
+						desc: "Match the paper's prerequisites to your concept notes, by name, title and aliases, and add what the chapter teaches and assumes to its properties. You confirm each match before the chapter is written.",
+						aliases: ['prerequisites', 'known concepts'],
+						control: { type: 'toggle', key: 'matchConcepts' },
+					},
+					{ name: 'Concept note folders', desc: 'One per line. Empty: the whole vault.', visible: () => this.s.matchConcepts, control: { type: 'textarea', key: 'conceptFolders', rows: 2, placeholder: 'Concepts' } },
+					{
+						name: 'A concept note holds',
+						desc: 'Rules, one per line, all of which a concept note holds: a tag (tag: concept, or #concept) or a property and its values (type: concept). Empty: every note in those folders.',
+						visible: () => this.s.matchConcepts,
+						control: { type: 'textarea', key: 'conceptFilter', rows: 2, placeholder: 'type: concept', validate: (v) => checkRulesText(v) },
+					},
+					{
+						name: 'Known concepts',
+						desc: 'Rules, one per line, any of which marks a concept note as known, so the review ticks it and tells you why: a folder (folder: Mastered), a tag (#known), or a property and its values (status: mastered, evergreen).',
+						visible: () => this.s.matchConcepts,
+						control: { type: 'textarea', key: 'knownRules', rows: 3, placeholder: '#known', validate: (v) => checkRulesText(v) },
+					},
+					{
+						name: 'Property for what it teaches',
+						desc: 'The concept notes the chapter teaches, as a list of links.',
+						visible: () => this.s.matchConcepts,
+						control: { type: 'text', key: 'teachesKey', placeholder: DEFAULT_SETTINGS.teachesKey, validate: (v) => checkPropertyName(v) },
+					},
+					{
+						name: 'Property for what it assumes',
+						desc: 'Every prerequisite matched to a concept note, as a list of links.',
+						visible: () => this.s.matchConcepts,
+						control: { type: 'text', key: 'prerequisitesKey', placeholder: DEFAULT_SETTINGS.prerequisitesKey, validate: (v) => checkPropertyName(v) },
+					},
+					{ name: 'Add the concept rows', searchable: false, visible: () => this.s.matchConcepts && this.s.propertiesMode === 'custom', render: (setting) => this.renderConceptRows(setting) },
 				],
 			},
 			{
@@ -268,6 +316,60 @@ export class P2CSettingTab extends PluginSettingTab {
 			},
 			{
 				type: 'group',
+				heading: 'Integrations',
+				items: [
+					{ name: INTEGRATIONS.knowledgeOs.name, aliases: ['learning road', 'progress'], render: (setting) => this.renderIntegration(setting, INTEGRATIONS.knowledgeOs, 'knowledgeOs', 'It needs concept matching on, for the properties its block draws.') },
+					{ name: INTEGRATIONS.noteRelatives.name, aliases: ['nav', 'links'], render: (setting) => this.renderIntegration(setting, INTEGRATIONS.noteRelatives, 'noteRelatives') },
+					{ name: INTEGRATIONS.dataview.name, render: (setting) => this.renderIntegration(setting, INTEGRATIONS.dataview, 'dataview') },
+					{
+						name: 'Dataview source for known concepts',
+						desc: 'A Dataview source: the concept notes it returns count as known, for example "Concepts/Mastered" or #known.',
+						visible: () => this.s.dataview,
+						control: { type: 'text', key: 'dataviewSource', placeholder: '#known' },
+					},
+					{ name: INTEGRATIONS.templater.name, render: (setting) => this.renderIntegration(setting, INTEGRATIONS.templater, 'templater', 'Only for your own template note (Note format).') },
+					{ name: INTEGRATIONS.spacedRepetition.name, aliases: ['flashcards', 'cards'], render: (setting) => this.renderIntegration(setting, INTEGRATIONS.spacedRepetition, null) },
+					{
+						name: 'Flashcards',
+						desc: "The chapter's exercises as cards, in a Flashcards section (or where your template puts {{flashcards}}).",
+						control: { type: 'dropdown', key: 'flashcards', options: { none: 'None', 'spaced-repetition': "Spaced Repetition's syntax", custom: 'A card template' } },
+					},
+					{ name: 'Deck tag', visible: () => this.s.flashcards !== 'none', control: { type: 'text', key: 'flashcardTag', placeholder: 'flashcards', validate: (v) => checkFlashcardTag(v) } },
+					{
+						name: 'Card template',
+						desc: 'One card: {{question}}, {{answer}}, {{kind}}, {{difficulty}}.',
+						visible: () => this.s.flashcards === 'custom',
+						control: { type: 'textarea', key: 'flashcardTemplate', rows: 3, validate: (v) => checkFlashcardTemplate(v) },
+					},
+					{
+						name: 'Commands after writing',
+						desc: 'Obsidian command ids, one per line, run in order once the new note is open (a linter\'s, for example). Nothing runs when the note is not opened, or in a batch.',
+						aliases: ['linter', 'hooks'],
+						control: { type: 'textarea', key: 'afterCommands', rows: 2, placeholder: 'obsidian-linter:lint-file', validate: (v) => checkCommands(v, (id) => this.plugin.hasCommand(id)) },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Learning outputs',
+				items: [
+					{
+						name: 'Chapter manifest',
+						desc: 'Beside each chapter, a JSON file for tools that track what you know: the paper, each prerequisite with its note and whether you knew it and why, the primers, the concepts and every exercise (docs/MANIFEST.md).',
+						control: { type: 'toggle', key: 'manifest' },
+					},
+					{ name: 'Manifest path', desc: 'A template; tokens such as {{paperSlug}}.', visible: () => this.s.manifest, control: { type: 'text', key: 'manifestPath', placeholder: DEFAULT_SETTINGS.manifestPath, validate: (v) => checkManifestPath(v) } },
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Batch',
+				items: [
+					{ name: 'Batch', desc: 'Papers queued from a folder, a Zotero collection or a PDF\'s menu, turned into chapters one at a time. A paper whose chapter note is there is skipped. The queue is kept when Obsidian closes.', render: (setting) => this.renderBatch(setting) },
+				],
+			},
+			{
+				type: 'group',
 				heading: 'Settings profile',
 				items: [
 					{ name: 'Preview', desc: 'See the note these settings write, from a sample chapter: no model is asked and nothing is written.', render: (setting) => this.renderPreview(setting) },
@@ -322,6 +424,56 @@ export class P2CSettingTab extends PluginSettingTab {
 		}));
 	}
 
+	private renderConceptRows(setting: Setting): void {
+		setting.setName('').setDesc(`Add ${this.s.teachesKey} and ${this.s.prerequisitesKey} to your property rows, as lists of links.`);
+		setting.addButton((b) => b.setButtonText('Add the concept rows').onClick(async () => {
+			for (const r of conceptRows(this.s)) {
+				if (!this.s.propertyRows.some((x) => x.key === r.key)) this.s.propertyRows.push(r);
+			}
+			await this.plugin.saveSettings();
+			this.update();
+		}));
+	}
+
+	/**
+	 * One plugin's row: what it adds, whether it is on, installed but off, or not installed, and where to get it. The
+	 * two integrations by this plugin's contributor are shown exactly like the others.
+	 */
+	private renderIntegration(setting: Setting, spec: IntegrationSpec, key: 'knowledgeOs' | 'noteRelatives' | 'dataview' | 'templater' | null, note = ''): void {
+		const lookup = (id: string) => this.plugin.pluginInfo(id);
+		const state = integrationState(spec, lookup);
+		setting.setDesc(spec.adds + (spec.needs ? ` ${spec.needs}` : '') + (note ? ` ${note}` : ''));
+		setting.descEl.createDiv({ cls: state.kind === 'ready' ? 'p2c-muted' : 'p2c-warn', text: state.text });
+		if (spec.id === INTEGRATIONS.noteRelatives.id && state.kind === 'ready' && this.s.noteRelatives) {
+			const nr = nrSettings(lookup);
+			const keys = this.s.matchConcepts ? [this.s.teachesKey, this.s.prerequisitesKey] : [];
+			const linkRows = this.s.propertiesMode === 'custom' ? this.s.propertyRows.filter((r) => r.type.startsWith('link')).map((r) => r.key) : [];
+			const missing = nr ? nrMissing(nr, [...keys, ...linkRows]) : [];
+			if (missing.length) {
+				setting.descEl.createDiv({ cls: 'p2c-warn', text: `Note Relatives draws no row for ${missing.join(', ')}: add a forward or an inverse row for each in its settings.` });
+				setting.addButton((b) => b.setButtonText('Open its settings').onClick(() => this.plugin.openPluginSettings(spec.id)));
+			}
+		}
+		if (state.kind === 'missing' || state.kind === 'outdated') {
+			setting.addButton((b) => b.setButtonText(state.kind === 'missing' ? 'Get it' : 'Update it').onClick(() => window.open(getItUrl(spec, lookup))));
+		}
+		if (key) {
+			setting.addToggle((t) => t.setValue(this.s[key]).onChange(async (v) => {
+				this.s[key] = v;
+				await this.plugin.saveSettings();
+				this.update();
+			}));
+		}
+	}
+
+	private renderBatch(setting: Setting): void {
+		const q = this.s.queue;
+		const count = (st: string) => q.filter((x) => x.status === st).length;
+		const parts = [`${count('waiting')} waiting`, `${count('done')} written`, `${count('skipped')} skipped`, `${count('failed')} failed`];
+		setting.descEl.createDiv({ cls: 'p2c-muted', text: (this.s.queuePaused ? 'Paused. ' : '') + parts.join(' · ') });
+		setting.addButton((b) => b.setButtonText('Open the batch').onClick(() => this.plugin.openBatch()));
+	}
+
 	private renderPreview(setting: Setting): void {
 		setting.addButton((b) => b.setButtonText('Preview').setCta().onClick(() => this.plugin.openPreview()));
 	}
@@ -357,7 +509,7 @@ export class P2CSettingTab extends PluginSettingTab {
 				b.setButtonText('Click again to reset');
 				return;
 			}
-			const keep = ['backendUrl', 'backendDir', 'pythonPath', 'autoStart', 'papers'] as const;
+			const keep: (keyof P2CSettings)[] = ['backendUrl', 'autoStart', ...MACHINE_KEYS];
 			const next: P2CSettings = { ...DEFAULT_SETTINGS, propertyRows: CHAPTER_ROWS.map((r) => ({ ...r })) };
 			for (const k of keep) (next as unknown as Record<string, unknown>)[k] = this.s[k];
 			this.plugin.settings = next;

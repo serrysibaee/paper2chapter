@@ -147,6 +147,136 @@ export const SAMPLE: SampleChapter = {
 		"warnings": "",
 		"assets": [
 			"F1.png"
+		],
+		"exercises": [
+			{
+				"id": "primer1",
+				"where": "primer",
+				"section": null,
+				"prerequisite_id": "weighted-averages",
+				"kind": "multiple_choice",
+				"difficulty": "easy",
+				"prompt": "Which value is $e^0$?",
+				"choices": [
+					"0",
+					"1",
+					"e"
+				],
+				"correct_choice": 1,
+				"answer": "1",
+				"explanation": "Any nonzero number to the power 0 equals 1.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": "verified"
+			},
+			{
+				"id": "primer2",
+				"where": "primer",
+				"section": null,
+				"prerequisite_id": "vectors-dot-products",
+				"kind": "multiple_choice",
+				"difficulty": "easy",
+				"prompt": "Which value is $e^0$?",
+				"choices": [
+					"0",
+					"1",
+					"e"
+				],
+				"correct_choice": 1,
+				"answer": "1",
+				"explanation": "Any nonzero number to the power 0 equals 1.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": "verified"
+			},
+			{
+				"id": "s1-q1",
+				"where": "section",
+				"section": 1,
+				"prerequisite_id": null,
+				"kind": "multiple_choice",
+				"difficulty": "easy",
+				"prompt": "If all scores are equal, what are the softmax weights?",
+				"choices": [
+					"All 0",
+					"All $1/n$",
+					"All 1"
+				],
+				"correct_choice": 1,
+				"answer": "All $1/n$",
+				"explanation": "Equal numerators $e^{z}$ divided by $n e^{z}$ give $1/n$.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": "verified"
+			},
+			{
+				"id": "s2-q1",
+				"where": "section",
+				"section": 2,
+				"prerequisite_id": null,
+				"kind": "multiple_choice",
+				"difficulty": "easy",
+				"prompt": "If all scores are equal, what are the softmax weights?",
+				"choices": [
+					"All 0",
+					"All $1/n$",
+					"All 1"
+				],
+				"correct_choice": 1,
+				"answer": "All $1/n$",
+				"explanation": "Equal numerators $e^{z}$ divided by $n e^{z}$ give $1/n$.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": "verified"
+			},
+			{
+				"id": "p1",
+				"where": "practice",
+				"section": null,
+				"prerequisite_id": null,
+				"kind": "conceptual",
+				"difficulty": "easy",
+				"prompt": "Why must softmax weights be positive?",
+				"choices": [],
+				"correct_choice": null,
+				"answer": "Because $e^x > 0$ for every real $x$.",
+				"explanation": "Each weight is a ratio of positive numbers.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": null
+			},
+			{
+				"id": "p2",
+				"where": "practice",
+				"section": null,
+				"prerequisite_id": null,
+				"kind": "math",
+				"difficulty": "medium",
+				"prompt": "Compute $w_1$ for scores $z = (2, 0)$. Give 3 decimals.",
+				"choices": [],
+				"correct_choice": null,
+				"answer": "$w_1 \\approx 0.881$",
+				"explanation": "$w_1 = e^2/(e^2+1) = \\sigma(2) \\approx 0.8808$.",
+				"starter_code": null,
+				"solution_code": null,
+				"check": "verified"
+			},
+			{
+				"id": "p3",
+				"where": "practice",
+				"section": null,
+				"prerequisite_id": null,
+				"kind": "python",
+				"difficulty": "medium",
+				"prompt": "Implement `softmax(z)` for a list of floats. Subtract the maximum score first for numerical stability.",
+				"choices": [],
+				"correct_choice": null,
+				"answer": "See the reference solution.",
+				"explanation": "Subtracting $\\max z$ leaves the weights unchanged but avoids overflow.",
+				"starter_code": "import math\n\ndef softmax(z):\n    # your code here\n    pass",
+				"solution_code": "import math\n\ndef softmax(z):\n    m = max(z)\n    e = [math.exp(v - m) for v in z]\n    s = sum(e)\n    return [v / s for v in e]",
+				"check": "verified"
+			}
 		]
 	}
 };

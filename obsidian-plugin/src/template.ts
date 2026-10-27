@@ -12,6 +12,7 @@
  */
 import { fill, tokenValue, type FormatDate, type Tokens } from './tokens.ts';
 import type { ChapterParts, SectionPart } from './types.ts';
+import { defuse } from './writer.ts';
 
 export const FRAGMENT_HELP = {
 	about: 'what the chapter is based on, and its model',
@@ -31,6 +32,8 @@ export const FRAGMENT_HELP = {
 	furtherReading: 'further reading',
 	references: "the paper's references",
 	warnings: 'notes from the generation, if any',
+	progress: "the Knowledge OS's live block for the chapter's concepts (Integrations)",
+	flashcards: 'the exercises as flashcards (Integrations)',
 };
 export const FRAGMENTS = Object.keys(FRAGMENT_HELP);
 
@@ -119,7 +122,13 @@ export function renderSection(s: SectionPart, opts: FormatOptions, tokens: Token
 	return `${h(level)} ${heading}` + (joinParts(parts) ? '\n\n' + joinParts(parts) : '');
 }
 
-export type Fragments = Record<keyof typeof FRAGMENT_HELP, string>;
+/** Pieces that come from the integrations rather than from the parts. */
+export interface ExtraPieces {
+	progress?: string;
+	flashcards?: string;
+}
+
+export type Fragments = Record<Exclude<keyof typeof FRAGMENT_HELP, keyof ExtraPieces>, string>;
 
 /** The pieces a template can place, from the parts and the format settings. */
 export function fragments(p: ChapterParts, opts: FormatOptions, tokens: Tokens, formatDate: FormatDate): Fragments {
@@ -163,9 +172,14 @@ export function stripFrontmatter(template: string): { body: string; had: boolean
 
 type Item = { text: string; fromTemplate: boolean } | { piece: string; prefix: string };
 
-/** The note's body: the template with its pieces placed and its tokens filled. */
-export function renderBody(template: string, p: ChapterParts, opts: FormatOptions, tokens: Tokens, formatDate: FormatDate): string {
-	const pieces: Record<string, string> = fragments(p, opts, tokens, formatDate);
+/**
+ * The note's body: the template with its pieces placed and its tokens filled. Every piece is defused once more as
+ * it goes in (the backend made it inert already); the template's own text is left as written, for Templater.
+ */
+export function renderBody(template: string, p: ChapterParts, opts: FormatOptions, tokens: Tokens, formatDate: FormatDate,
+	extra: ExtraPieces = {}): string {
+	const raw: Record<string, string> = { ...fragments(p, opts, tokens, formatDate), progress: extra.progress ?? '', flashcards: extra.flashcards ?? '' };
+	const pieces = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, defuse(v)]));
 	const has = (name: string) => (name in pieces ? pieces[name] !== '' : tokenValue(tokens, name).length > 0);
 	const items: Item[] = [];
 	const stack: { name: string; keep: boolean }[] = [];
@@ -240,6 +254,8 @@ export const TEXTBOOK_TEMPLATE = `# {{title}}
 {{#prerequisites}}
 ## What it assumes
 
+{{progress}}
+
 {{prerequisites}}
 
 {{primers}}
@@ -293,6 +309,12 @@ export const TEXTBOOK_TEMPLATE = `# {{title}}
 {{references}}
 
 {{/references}}
+{{#flashcards}}
+## Flashcards
+
+{{flashcards}}
+
+{{/flashcards}}
 {{#warnings}}
 > [!warning] Generation notes
 > {{warnings}}

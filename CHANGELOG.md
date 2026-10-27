@@ -1,5 +1,39 @@
 # Changelog
 
+## Obsidian plugin 0.3.0 (unreleased)
+
+The third step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S3). The defaults
+still write the 0.1.1 note in the same place, byte for byte, and 0.2.0's saved settings carry over, every new
+option off. Flashcards and the manifest's exercises need backend 0.4.0.
+
+### Added
+- **Prerequisites and concepts**: the paper's prerequisites matched to your concept notes (folders and rules
+  for what a concept note is), by name, title and aliases; rules for what counts as known (a folder, a tag, a
+  property and its values). In the generation window, each prerequisite shows its note, which you can change, and
+  comes ticked only with a reason it shows; *What does it teach?* lists the concept notes the chapter teaches. Two
+  properties for them, `teaches` and `prerequisites` by default (names are settings), and the tokens
+  `{{concepts}}`, `{{primedConcepts}}`, `{{assumedConcepts}}` and `{{knownConcepts}}`. A `links` property type.
+- **Integrations**, each detected, with what it adds and where to get it, and one notice, once, naming those
+  not installed: **Knowledge OS** (what is known from its standing, and a live progress block, through its
+  published API, version 1), **Note Relatives** (its block, and which chapter properties it draws no row for),
+  **Dataview** (a source of known notes), **Templater** (your template note's own tags run after writing; text from
+  the paper never), **Spaced Repetition** (flashcards from the exercises, or your own card template), and
+  **commands after writing**. Knowledge OS and Note Relatives are by a contributor to this plugin and are listed
+  like the others.
+- **Chapter manifest**: a JSON file beside each chapter for tools that track learning
+  ([docs/MANIFEST.md](docs/MANIFEST.md)).
+- **Batch**: papers from a PDF's menu, a folder or a Zotero collection, one at a time, kept across restarts, with
+  pause, resume and retry; a paper whose note is there is skipped, and one the backend has already written is
+  imported rather than generated again.
+
+## Backend 0.4.0 (unreleased)
+
+### Added
+- `export.parts` gives **every exercise as data** (`exercises`): the primers' checks, the sections' questions and
+  the practice problems, each with its kind, difficulty, prompt, choices, answer, explanation, code and its
+  check, every text made inert. The answers are there whatever `include_solutions` says. The parts keep
+  `version: 1`: a new field does not change it.
+
 ## Obsidian plugin 0.2.0 (2026-10-27, released)
 
 The second step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S2). The defaults

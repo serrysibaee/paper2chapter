@@ -98,6 +98,32 @@ export class ZoteroClient {
 		return rows.map(zoteroItem).filter((x): x is ZoteroItem => !!x && x.itemType !== 'note' && x.itemType !== 'attachment');
 	}
 
+	/** Every collection, named with its parents ("Robotics / VLA"), in that order. */
+	async collections(): Promise<{ key: string; name: string }[]> {
+		const res = await this.get('/api/users/0/collections?format=json');
+		const rows = (JSON.parse(res.text) as { key?: string; data?: Record<string, unknown> }[])
+			.map((r) => ({ key: str(r.key), name: str(r.data?.name), parent: typeof r.data?.parentCollection === 'string' ? r.data.parentCollection : '' }))
+			.filter((r) => r.key);
+		const byKey = new Map(rows.map((r) => [r.key, r]));
+		const full = (r: { name: string; parent: string }, depth = 0): string => {
+			const p = byKey.get(r.parent);
+			return p && depth < 20 ? `${full(p, depth + 1)} / ${r.name}` : r.name;
+		};
+		return rows.map((r) => ({ key: r.key, name: full(r) })).sort((a, b) => a.name.localeCompare(b.name));
+	}
+
+	/** A collection's items (not its notes or attachments), every page of them. */
+	async collectionItems(collectionKey: string): Promise<ZoteroItem[]> {
+		const out: ZoteroItem[] = [];
+		for (let start = 0; start < 10000; start += 100) {
+			const res = await this.get(`/api/users/0/collections/${encodeURIComponent(collectionKey)}/items/top?format=json&limit=100&start=${start}`);
+			const rows = JSON.parse(res.text) as unknown[];
+			out.push(...rows.map(zoteroItem).filter((x): x is ZoteroItem => !!x && x.itemType !== 'note' && x.itemType !== 'attachment'));
+			if (rows.length < 100) break;
+		}
+		return out;
+	}
+
 	/** The item's first PDF attachment that is a file (stored or linked), or null. */
 	async pdf(itemKey: string): Promise<ZoteroAttachment | null> {
 		const res = await this.get(`/api/users/0/items/${encodeURIComponent(itemKey)}/children?format=json`);

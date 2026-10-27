@@ -168,6 +168,24 @@ export interface SectionPart {
 	md: string;
 }
 
+/** One exercise as data (backend 0.4.0): primers' checks, sections' questions and the practice set, in that order. */
+export interface ExercisePart {
+	id: string;
+	where: 'primer' | 'section' | 'practice';
+	section: number | null;
+	prerequisite_id: string | null;
+	kind: string; // conceptual, multiple_choice, math, python
+	difficulty: string;
+	prompt: string;
+	choices: string[];
+	correct_choice: number | null;
+	answer: string;
+	explanation: string;
+	starter_code: string | null;
+	solution_code: string | null;
+	check: VerificationStatus | null;
+}
+
 export interface ChapterParts {
 	version: number;
 	paper_id: string;
@@ -195,4 +213,5 @@ export interface ChapterParts {
 	references: string;
 	warnings: string;
 	assets: string[];
+	exercises?: ExercisePart[]; // absent from a backend before 0.4.0
 }
