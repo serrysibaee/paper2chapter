@@ -1,6 +1,6 @@
 # Changelog
 
-## Obsidian plugin 0.3.0 (unreleased)
+## Obsidian plugin 0.3.0 (2026-10-27)
 
 The third step toward note settings ([docs/PLAN-note-settings.md](docs/PLAN-note-settings.md), S3). The defaults
 still write the 0.1.1 note in the same place, byte for byte, and 0.2.0's saved settings carry over, every new
@@ -26,7 +26,7 @@ option off. Flashcards and the manifest's exercises need backend 0.4.0.
   pause, resume and retry; a paper whose note is there is skipped, and one the backend has already written is
   imported rather than generated again.
 
-## Backend 0.4.0 (unreleased)
+## Backend 0.4.0 (2026-10-27)
 
 ### Added
 - `export.parts` gives **every exercise as data** (`exercises`): the primers' checks, the sections' questions and
