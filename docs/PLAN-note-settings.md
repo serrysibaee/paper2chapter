@@ -95,6 +95,8 @@ not say.
 - [x] `{{a|b}}`, the first token with a value (N15), in every template, with the checks and the token-use test
       (`usesAny`) reading each name in it.
 - [x] `docs/OBSIDIAN.md` documents all three.
+- [x] Tag `0.4.0` (go-ahead given 2026-10-27): https://github.com/serrysibaee/paper2chapter/releases/tag/0.4.0,
+      marked Latest; `main.js`, `manifest.json` and `styles.css` byte-identical to a local build.
 
 ## Results log
 
@@ -113,3 +115,4 @@ not say.
 | 2026-10-27 | Found live, fixed | a ready row said "X is on" beside its own switch, off (now "installed and enabled"); a note the reader picks was not judged as a match is (now `repick`: ticked with its reason unless the reader set the tick); a multiple-choice card repeated its answer, and a coding card lacked its solution; an imported chapter (and the batch writing one the backend had) gave today's reasons for the ticks it was generated with (now `known_by: generation`). Plugin 117 passed |
 | 2026-10-27 | Release 0.3.0 | pull request 3 merged by rebase; tag `0.3.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |
 | 2026-10-27 | Plugin after S4 | 122 passed (117 before), lint 0 errors 0 warnings, tsc clean; backend 142 passed, 1 skipped (unchanged). A vault's chapter template using all three, rendered by this code on the sample chapter, passes that vault's own note checker with no error and no miss (on 0.3.0: two misses, and ` - Chapter` as the name of a paper without a note) |
+| 2026-10-27 | Release 0.4.0 | pull request 4 merged by rebase; tag `0.4.0`; the release workflow passed and published it, marked Latest; its three assets byte-identical to a local build |
